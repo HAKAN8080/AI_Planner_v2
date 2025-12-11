@@ -859,20 +859,30 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
             messages=messages
         )
         
-        # Tool kullanımı var mı kontrol et
-        tool_kullanimi = False
-        
+        # Text içeriklerini topla
         for block in response.content:
             if block.type == "text":
                 tum_cevaplar.append(block.text)
+        
+        # Tool kullanımlarını topla
+        tool_uses = [block for block in response.content if block.type == "tool_use"]
+        
+        # Tool kullanımı yoksa bitir
+        if not tool_uses:
+            break
+        
+        # Assistant mesajını ekle
+        messages.append({"role": "assistant", "content": response.content})
+        
+        # Tüm tool'lar için sonuçları topla
+        tool_results = []
+        for tool_use in tool_uses:
+            tool_name = tool_use.name
+            tool_input = tool_use.input
+            tool_use_id = tool_use.id
             
-            elif block.type == "tool_use":
-                tool_kullanimi = True
-                tool_name = block.name
-                tool_input = block.input
-                tool_use_id = block.id
-                
-                # Tool'u çağır
+            # Tool'u çağır
+            try:
                 if tool_name == "genel_ozet":
                     tool_result = genel_ozet(kup)
                 elif tool_name == "kategori_analiz":
@@ -889,20 +899,23 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
                     tool_result = bolge_karsilastir(kup)
                 else:
                     tool_result = f"Bilinmeyen araç: {tool_name}"
-                
-                # Mesajlara ekle
-                messages.append({"role": "assistant", "content": response.content})
-                messages.append({
-                    "role": "user",
-                    "content": [{
-                        "type": "tool_result",
-                        "tool_use_id": tool_use_id,
-                        "content": tool_result
-                    }]
-                })
+            except Exception as e:
+                tool_result = f"Hata: {str(e)}"
+            
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "content": tool_result
+            })
         
-        # Tool kullanımı yoksa döngüden çık
-        if not tool_kullanimi or response.stop_reason == "end_turn":
+        # Tüm tool sonuçlarını tek bir user mesajında gönder
+        messages.append({
+            "role": "user",
+            "content": tool_results
+        })
+        
+        # Stop reason end_turn ise bitir
+        if response.stop_reason == "end_turn":
             break
     
     return "\n".join(tum_cevaplar)
