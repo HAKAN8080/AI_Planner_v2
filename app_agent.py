@@ -93,40 +93,28 @@ with st.sidebar:
     st.markdown("---")
     
     # Veri Yükleme
-    st.subheader("📊 Veri Yükle")
+    st.subheader("📊 Veri Yükle (CSV)")
     
-    trading_file = st.file_uploader(
-        "Trading Raporu",
-        type=['xlsx', 'xls'],
-        key="trading_sidebar"
+    st.caption("CSV dosyalarının olduğu klasör yolunu gir")
+    
+    veri_klasoru = st.text_input(
+        "Veri Klasörü",
+        value="./data",
+        help="anlik_stok_satis*.csv, urun_master.csv, magaza_master.csv, depo_stok.csv, kpi.csv dosyalarının bulunduğu klasör"
     )
     
-    urun_file = st.file_uploader(
-        "Ürün Raporu",
-        type=['xlsx', 'xls'],
-        key="urun_sidebar"
-    )
-    
-    if trading_file and urun_file:
-        st.success("✅ Veriler yüklendi")
-        
-        # Veriyi session'a kaydet
-        if 'kup_yuklendi' not in st.session_state:
-            import tempfile
-            
-            with tempfile.TemporaryDirectory() as tmpdir:
-                trading_path = os.path.join(tmpdir, "trading.xlsx")
-                urun_path = os.path.join(tmpdir, "urun.xlsx")
-                
-                with open(trading_path, 'wb') as f:
-                    f.write(trading_file.getvalue())
-                with open(urun_path, 'wb') as f:
-                    f.write(urun_file.getvalue())
-                
-                # KupVeri oluştur
-                from agent_tools import KupVeri
-                st.session_state['kup'] = KupVeri(trading_path, urun_path)
+    if st.button("📂 Veriyi Yükle", use_container_width=True):
+        try:
+            from agent_tools import KupVeri
+            with st.spinner("Veri yükleniyor..."):
+                st.session_state['kup'] = KupVeri(veri_klasoru)
                 st.session_state['kup_yuklendi'] = True
+            st.success("✅ Veri yüklendi!")
+        except Exception as e:
+            st.error(f"❌ Hata: {str(e)}")
+    
+    if 'kup_yuklendi' in st.session_state and st.session_state['kup_yuklendi']:
+        st.success("✅ Veri hazır")
     
     st.markdown("---")
     
