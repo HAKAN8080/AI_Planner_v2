@@ -35,53 +35,68 @@ class KupVeri:
             dfs = []
             for f in stok_satis_files:
                 try:
-                    df = pd.read_csv(f, encoding='utf-8')
+                    df = pd.read_csv(f, encoding='utf-8', sep=None, engine='python')
                 except:
-                    df = pd.read_csv(f, encoding='latin-1')
+                    try:
+                        df = pd.read_csv(f, encoding='latin-1', sep=None, engine='python')
+                    except:
+                        df = pd.read_csv(f, encoding='utf-8', sep=';')
                 dfs.append(df)
             self.stok_satis = pd.concat(dfs, ignore_index=True)
         else:
             self.stok_satis = pd.DataFrame()
         
-        # Master tablolar
+        # Master tablolar - sep=None ile otomatik algılama
         urun_path = os.path.join(self.veri_klasoru, "urun_master.csv")
         if os.path.exists(urun_path):
             try:
-                self.urun_master = pd.read_csv(urun_path, encoding='utf-8')
+                self.urun_master = pd.read_csv(urun_path, encoding='utf-8', sep=None, engine='python')
             except:
-                self.urun_master = pd.read_csv(urun_path, encoding='latin-1')
+                try:
+                    self.urun_master = pd.read_csv(urun_path, encoding='latin-1', sep=None, engine='python')
+                except:
+                    self.urun_master = pd.read_csv(urun_path, encoding='utf-8', sep=';')
         else:
             self.urun_master = pd.DataFrame()
         
         magaza_path = os.path.join(self.veri_klasoru, "magaza_master.csv")
         if os.path.exists(magaza_path):
             try:
-                self.magaza_master = pd.read_csv(magaza_path, encoding='utf-8')
+                self.magaza_master = pd.read_csv(magaza_path, encoding='utf-8', sep=None, engine='python')
             except:
-                self.magaza_master = pd.read_csv(magaza_path, encoding='latin-1')
+                try:
+                    self.magaza_master = pd.read_csv(magaza_path, encoding='latin-1', sep=None, engine='python')
+                except:
+                    self.magaza_master = pd.read_csv(magaza_path, encoding='utf-8', sep=';')
         else:
             self.magaza_master = pd.DataFrame()
         
         depo_path = os.path.join(self.veri_klasoru, "depo_stok.csv")
         if os.path.exists(depo_path):
             try:
-                self.depo_stok = pd.read_csv(depo_path, encoding='utf-8')
+                self.depo_stok = pd.read_csv(depo_path, encoding='utf-8', sep=None, engine='python')
             except:
-                self.depo_stok = pd.read_csv(depo_path, encoding='latin-1')
+                try:
+                    self.depo_stok = pd.read_csv(depo_path, encoding='latin-1', sep=None, engine='python')
+                except:
+                    self.depo_stok = pd.read_csv(depo_path, encoding='utf-8', sep=';')
         else:
             self.depo_stok = pd.DataFrame()
         
         kpi_path = os.path.join(self.veri_klasoru, "kpi.csv")
         if os.path.exists(kpi_path):
             try:
-                self.kpi = pd.read_csv(kpi_path, encoding='utf-8')
+                self.kpi = pd.read_csv(kpi_path, encoding='utf-8', sep=None, engine='python')
             except:
-                self.kpi = pd.read_csv(kpi_path, encoding='latin-1')
+                try:
+                    self.kpi = pd.read_csv(kpi_path, encoding='latin-1', sep=None, engine='python')
+                except:
+                    self.kpi = pd.read_csv(kpi_path, encoding='utf-8', sep=';')
         else:
             self.kpi = pd.DataFrame()
         
         print(f"✅ Veri yüklendi:")
-        print(f"   - Stok/Satış: {len(self.stok_satis):,} satır")
+        print(f"   - Stok/Satış: {len(self.stok_satis):,} satır | Kolonlar: {list(self.stok_satis.columns)}")
         print(f"   - Ürün Master: {len(self.urun_master):,} ürün | Kolonlar: {list(self.urun_master.columns)}")
         print(f"   - Mağaza Master: {len(self.magaza_master):,} mağaza | Kolonlar: {list(self.magaza_master.columns)}")
         print(f"   - Depo Stok: {len(self.depo_stok):,} satır")
