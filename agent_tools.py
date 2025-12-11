@@ -108,8 +108,25 @@ class KupVeri:
         if len(self.stok_satis) == 0:
             return
         
-        # Ürün master ile join (sadece mevcut kolonları al)
+        # Kolon isimlerini lowercase yap (tutarlılık için)
+        self.stok_satis.columns = self.stok_satis.columns.str.lower().str.strip()
         if len(self.urun_master) > 0:
+            self.urun_master.columns = self.urun_master.columns.str.lower().str.strip()
+        if len(self.magaza_master) > 0:
+            self.magaza_master.columns = self.magaza_master.columns.str.lower().str.strip()
+        if len(self.depo_stok) > 0:
+            self.depo_stok.columns = self.depo_stok.columns.str.lower().str.strip()
+        if len(self.kpi) > 0:
+            self.kpi.columns = self.kpi.columns.str.lower().str.strip()
+        
+        print(f"   - Stok/Satış kolonları: {list(self.stok_satis.columns)}")
+        
+        # Ürün master ile join (sadece mevcut kolonları al)
+        if len(self.urun_master) > 0 and 'urun_kod' in self.stok_satis.columns and 'urun_kod' in self.urun_master.columns:
+            # Veri tiplerini eşitle
+            self.stok_satis['urun_kod'] = self.stok_satis['urun_kod'].astype(str)
+            self.urun_master['urun_kod'] = self.urun_master['urun_kod'].astype(str)
+            
             urun_kolonlar = ['urun_kod']
             for kol in ['kategori_kod', 'umg', 'mg', 'marka_kod', 'nitelik', 'durum']:
                 if kol in self.urun_master.columns:
@@ -123,7 +140,11 @@ class KupVeri:
                 )
         
         # Mağaza master ile join (sadece mevcut kolonları al)
-        if len(self.magaza_master) > 0:
+        if len(self.magaza_master) > 0 and 'magaza_kod' in self.stok_satis.columns and 'magaza_kod' in self.magaza_master.columns:
+            # Veri tiplerini eşitle
+            self.stok_satis['magaza_kod'] = self.stok_satis['magaza_kod'].astype(str)
+            self.magaza_master['magaza_kod'] = self.magaza_master['magaza_kod'].astype(str)
+            
             mag_kolonlar = ['magaza_kod']
             for kol in ['il', 'bolge', 'tip', 'depo_kod']:
                 if kol in self.magaza_master.columns:
@@ -143,6 +164,10 @@ class KupVeri:
                 kpi_df = kpi_df.rename(columns={'mg_id': 'mg'})
             
             if 'mg' in kpi_df.columns:
+                # Veri tiplerini eşitle
+                self.stok_satis['mg'] = self.stok_satis['mg'].astype(str)
+                kpi_df['mg'] = kpi_df['mg'].astype(str)
+                
                 self.stok_satis = self.stok_satis.merge(
                     kpi_df,
                     on='mg',
