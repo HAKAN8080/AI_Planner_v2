@@ -171,9 +171,10 @@ if mesaj:
         st.session_state['messages'].append({'role': 'user', 'content': mesaj})
         
         # Agent'ı çalıştır
-        with st.spinner("🤖 Sanal Planner düşünüyor..."):
+        with st.spinner("🤖 Sanal Planner düşünüyor... (Bu 10-30 saniye sürebilir)"):
             try:
                 from agent_tools import agent_calistir
+                import traceback
                 
                 sonuc = agent_calistir(
                     api_key,
@@ -181,11 +182,16 @@ if mesaj:
                     mesaj
                 )
                 
-                # Agent cevabını ekle
-                st.session_state['messages'].append({'role': 'agent', 'content': sonuc})
+                if sonuc and len(sonuc.strip()) > 0:
+                    # Agent cevabını ekle
+                    st.session_state['messages'].append({'role': 'agent', 'content': sonuc})
+                else:
+                    st.session_state['messages'].append({'role': 'agent', 'content': "⚠️ Agent yanıt vermedi. Lütfen tekrar deneyin."})
                 
             except Exception as e:
-                st.error(f"❌ Hata: {str(e)}")
+                error_msg = f"❌ Hata: {str(e)}\n\nDetay:\n{traceback.format_exc()}"
+                st.error(error_msg)
+                st.session_state['messages'].append({'role': 'agent', 'content': error_msg})
         
         # Sayfayı yenile
         st.rerun()
