@@ -67,18 +67,28 @@ st.markdown("---")
 with st.sidebar:
     st.header("⚙️ Ayarlar")
     
-    # API Key
+    # API Key - önce secrets'tan dene, yoksa input al
     st.subheader("🔑 Claude API")
-    api_key = st.text_input(
-        "API Key",
-        type="password",
-        help="console.anthropic.com'dan aldığın API key"
-    )
     
-    if api_key:
-        st.success("✅ API Key girildi")
+    # Secrets'tan oku
+    try:
+        api_key_secret = st.secrets.get("ANTHROPIC_API_KEY", "")
+    except:
+        api_key_secret = ""
+    
+    if api_key_secret:
+        api_key = api_key_secret
+        st.success("✅ API Key (secrets'tan)")
     else:
-        st.warning("⚠️ API Key gerekli")
+        api_key = st.text_input(
+            "API Key",
+            type="password",
+            help="console.anthropic.com'dan aldığın API key"
+        )
+        if api_key:
+            st.success("✅ API Key girildi")
+        else:
+            st.warning("⚠️ API Key gerekli (secrets veya manuel)")
     
     st.markdown("---")
     
