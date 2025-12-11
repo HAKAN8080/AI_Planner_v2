@@ -32,30 +32,60 @@ class KupVeri:
         # Anlık stok satış (parçalı dosyaları birleştir)
         stok_satis_files = glob.glob(os.path.join(self.veri_klasoru, "anlik_stok_satis*.csv"))
         if stok_satis_files:
-            dfs = [pd.read_csv(f) for f in stok_satis_files]
+            dfs = []
+            for f in stok_satis_files:
+                try:
+                    df = pd.read_csv(f, encoding='utf-8')
+                except:
+                    df = pd.read_csv(f, encoding='latin-1')
+                dfs.append(df)
             self.stok_satis = pd.concat(dfs, ignore_index=True)
         else:
             self.stok_satis = pd.DataFrame()
         
         # Master tablolar
         urun_path = os.path.join(self.veri_klasoru, "urun_master.csv")
-        self.urun_master = pd.read_csv(urun_path) if os.path.exists(urun_path) else pd.DataFrame()
+        if os.path.exists(urun_path):
+            try:
+                self.urun_master = pd.read_csv(urun_path, encoding='utf-8')
+            except:
+                self.urun_master = pd.read_csv(urun_path, encoding='latin-1')
+        else:
+            self.urun_master = pd.DataFrame()
         
         magaza_path = os.path.join(self.veri_klasoru, "magaza_master.csv")
-        self.magaza_master = pd.read_csv(magaza_path) if os.path.exists(magaza_path) else pd.DataFrame()
+        if os.path.exists(magaza_path):
+            try:
+                self.magaza_master = pd.read_csv(magaza_path, encoding='utf-8')
+            except:
+                self.magaza_master = pd.read_csv(magaza_path, encoding='latin-1')
+        else:
+            self.magaza_master = pd.DataFrame()
         
         depo_path = os.path.join(self.veri_klasoru, "depo_stok.csv")
-        self.depo_stok = pd.read_csv(depo_path) if os.path.exists(depo_path) else pd.DataFrame()
+        if os.path.exists(depo_path):
+            try:
+                self.depo_stok = pd.read_csv(depo_path, encoding='utf-8')
+            except:
+                self.depo_stok = pd.read_csv(depo_path, encoding='latin-1')
+        else:
+            self.depo_stok = pd.DataFrame()
         
         kpi_path = os.path.join(self.veri_klasoru, "kpi.csv")
-        self.kpi = pd.read_csv(kpi_path) if os.path.exists(kpi_path) else pd.DataFrame()
+        if os.path.exists(kpi_path):
+            try:
+                self.kpi = pd.read_csv(kpi_path, encoding='utf-8')
+            except:
+                self.kpi = pd.read_csv(kpi_path, encoding='latin-1')
+        else:
+            self.kpi = pd.DataFrame()
         
         print(f"✅ Veri yüklendi:")
         print(f"   - Stok/Satış: {len(self.stok_satis):,} satır")
-        print(f"   - Ürün Master: {len(self.urun_master):,} ürün")
-        print(f"   - Mağaza Master: {len(self.magaza_master):,} mağaza")
+        print(f"   - Ürün Master: {len(self.urun_master):,} ürün | Kolonlar: {list(self.urun_master.columns)}")
+        print(f"   - Mağaza Master: {len(self.magaza_master):,} mağaza | Kolonlar: {list(self.magaza_master.columns)}")
         print(f"   - Depo Stok: {len(self.depo_stok):,} satır")
-        print(f"   - KPI: {len(self.kpi):,} satır")
+        print(f"   - KPI: {len(self.kpi):,} satır | Kolonlar: {list(self.kpi.columns)}")
     
     def _hazirla(self):
         """Veriyi zenginleştir ve hesaplamalar yap"""
@@ -63,29 +93,46 @@ class KupVeri:
         if len(self.stok_satis) == 0:
             return
         
-        # Ürün master ile join
+        # Ürün master ile join (sadece mevcut kolonları al)
         if len(self.urun_master) > 0:
-            self.stok_satis = self.stok_satis.merge(
-                self.urun_master[['urun_kod', 'kategori_kod', 'umg', 'mg', 'marka_kod', 'nitelik', 'durum']],
-                on='urun_kod',
-                how='left'
-            )
+            urun_kolonlar = ['urun_kod']
+            for kol in ['kategori_kod', 'umg', 'mg', 'marka_kod', 'nitelik', 'durum']:
+                if kol in self.urun_master.columns:
+                    urun_kolonlar.append(kol)
+            
+            if len(urun_kolonlar) > 1:
+                self.stok_satis = self.stok_satis.merge(
+                    self.urun_master[urun_kolonlar],
+                    on='urun_kod',
+                    how='left'
+                )
         
-        # Mağaza master ile join
+        # Mağaza master ile join (sadece mevcut kolonları al)
         if len(self.magaza_master) > 0:
-            self.stok_satis = self.stok_satis.merge(
-                self.magaza_master[['magaza_kod', 'il', 'bolge', 'tip', 'depo_kod']],
-                on='magaza_kod',
-                how='left'
-            )
+            mag_kolonlar = ['magaza_kod']
+            for kol in ['il', 'bolge', 'tip', 'depo_kod']:
+                if kol in self.magaza_master.columns:
+                    mag_kolonlar.append(kol)
+            
+            if len(mag_kolonlar) > 1:
+                self.stok_satis = self.stok_satis.merge(
+                    self.magaza_master[mag_kolonlar],
+                    on='magaza_kod',
+                    how='left'
+                )
         
         # KPI ile join (mg bazlı)
-        if len(self.kpi) > 0:
-            self.stok_satis = self.stok_satis.merge(
-                self.kpi.rename(columns={'mg_id': 'mg'}),
-                on='mg',
-                how='left'
-            )
+        if len(self.kpi) > 0 and 'mg' in self.stok_satis.columns:
+            kpi_df = self.kpi.copy()
+            if 'mg_id' in kpi_df.columns:
+                kpi_df = kpi_df.rename(columns={'mg_id': 'mg'})
+            
+            if 'mg' in kpi_df.columns:
+                self.stok_satis = self.stok_satis.merge(
+                    kpi_df,
+                    on='mg',
+                    how='left'
+                )
         
         # Kar hesapla
         self.stok_satis['kar'] = self.stok_satis['ciro'] - self.stok_satis['smm']
