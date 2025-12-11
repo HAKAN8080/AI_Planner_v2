@@ -167,10 +167,10 @@ if mesaj:
     elif 'kup' not in st.session_state:
         st.error("❌ Lütfen sol panelden veri dosyalarını yükleyin.")
     else:
-        # Kullanıcı mesajını ekle
-        st.session_state['messages'].append({'role': 'user', 'content': mesaj})
+        # Kullanıcı mesajını hemen göster
+        st.markdown(f'<div class="chat-message user-message">🧑 {mesaj}</div>', unsafe_allow_html=True)
         
-        # Agent'ı çalıştır
+        # Spinner ile cevap bekle
         with st.spinner("🤖 Sanal Planner düşünüyor... (Bu 10-30 saniye sürebilir)"):
             try:
                 from agent_tools import agent_calistir
@@ -183,18 +183,21 @@ if mesaj:
                 )
                 
                 if sonuc and len(sonuc.strip()) > 0:
-                    # Agent cevabını ekle
+                    # Session'a kaydet
+                    st.session_state['messages'].append({'role': 'user', 'content': mesaj})
                     st.session_state['messages'].append({'role': 'agent', 'content': sonuc})
+                    # Cevabı göster
+                    st.markdown(f'<div class="chat-message agent-message">🤖 {sonuc}</div>', unsafe_allow_html=True)
                 else:
+                    st.session_state['messages'].append({'role': 'user', 'content': mesaj})
                     st.session_state['messages'].append({'role': 'agent', 'content': "⚠️ Agent yanıt vermedi. Lütfen tekrar deneyin."})
+                    st.warning("⚠️ Agent yanıt vermedi. Lütfen tekrar deneyin.")
                 
             except Exception as e:
                 error_msg = f"❌ Hata: {str(e)}\n\nDetay:\n{traceback.format_exc()}"
                 st.error(error_msg)
+                st.session_state['messages'].append({'role': 'user', 'content': mesaj})
                 st.session_state['messages'].append({'role': 'agent', 'content': error_msg})
-        
-        # Sayfayı yenile
-        st.rerun()
 
 # Temizle butonu
 col1, col2, col3 = st.columns([1, 1, 1])
