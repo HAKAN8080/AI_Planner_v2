@@ -134,28 +134,50 @@ class KupVeri:
                     how='left'
                 )
         
-        # Kar hesapla
-        self.stok_satis['kar'] = self.stok_satis['ciro'] - self.stok_satis['smm']
+        # Kar hesapla (kolonlar varsa)
+        if 'ciro' in self.stok_satis.columns and 'smm' in self.stok_satis.columns:
+            self.stok_satis['kar'] = self.stok_satis['ciro'] - self.stok_satis['smm']
+        else:
+            self.stok_satis['kar'] = 0
+            self.stok_satis['ciro'] = self.stok_satis.get('ciro', 0)
         
         # Kar marjı
-        self.stok_satis['kar_marji'] = np.where(
-            self.stok_satis['ciro'] > 0,
-            self.stok_satis['kar'] / self.stok_satis['ciro'],
-            0
-        )
+        if 'ciro' in self.stok_satis.columns:
+            self.stok_satis['kar_marji'] = np.where(
+                self.stok_satis['ciro'] > 0,
+                self.stok_satis['kar'] / self.stok_satis['ciro'],
+                0
+            )
+        else:
+            self.stok_satis['kar_marji'] = 0
         
-        # Haftalık satış (şimdilik satis kolonunu kullan)
-        self.stok_satis['haftalik_satis'] = self.stok_satis['satis']
+        # Haftalık satış (satis kolonunu kullan)
+        if 'satis' in self.stok_satis.columns:
+            self.stok_satis['haftalik_satis'] = self.stok_satis['satis']
+        else:
+            self.stok_satis['haftalik_satis'] = 0
         
         # Cover hesapla
-        self.stok_satis['cover'] = np.where(
-            self.stok_satis['haftalik_satis'] > 0,
-            self.stok_satis['stok'] / self.stok_satis['haftalik_satis'],
-            np.where(self.stok_satis['stok'] > 0, 999, 0)
-        )
+        if 'stok' in self.stok_satis.columns:
+            self.stok_satis['cover'] = np.where(
+                self.stok_satis['haftalik_satis'] > 0,
+                self.stok_satis['stok'] / self.stok_satis['haftalik_satis'],
+                np.where(self.stok_satis['stok'] > 0, 999, 0)
+            )
+        else:
+            self.stok_satis['cover'] = 0
+            self.stok_satis['stok'] = 0
         
         # Stok durumu değerlendirme
         self.stok_satis['stok_durum'] = 'NORMAL'
+        
+        # min_deger ve max_deger kolonları yoksa varsayılan değer kullan
+        if 'min_deger' not in self.stok_satis.columns:
+            self.stok_satis['min_deger'] = 3
+        if 'max_deger' not in self.stok_satis.columns:
+            self.stok_satis['max_deger'] = 20
+        if 'forward_cover' not in self.stok_satis.columns:
+            self.stok_satis['forward_cover'] = 4
         
         # Min altı = SEVKİYAT GEREKLİ
         mask_min = self.stok_satis['stok'] < self.stok_satis['min_deger'].fillna(3)
@@ -168,6 +190,8 @@ class KupVeri:
         # Cover hedefin üstünde = YAVAS
         mask_cover = self.stok_satis['cover'] > self.stok_satis['forward_cover'].fillna(4) * 3
         self.stok_satis.loc[mask_cover & (self.stok_satis['stok_durum'] == 'NORMAL'), 'stok_durum'] = 'YAVAS'
+        
+        print(f"   - Stok/Satış kolonları: {list(self.stok_satis.columns)}")
 
 
 # =============================================================================
