@@ -247,11 +247,11 @@ def genel_ozet(kup: KupVeri) -> str:
     sonuc = []
     sonuc.append("=== GENEL ÖZET ===\n")
     
-    # Toplam metrikler
-    toplam_stok = kup.stok_satis['stok'].sum()
-    toplam_satis = kup.stok_satis['satis'].sum()
-    toplam_ciro = kup.stok_satis['ciro'].sum()
-    toplam_kar = kup.stok_satis['kar'].sum()
+    # Toplam metrikler - güvenli erişim
+    toplam_stok = kup.stok_satis['stok'].sum() if 'stok' in kup.stok_satis.columns else 0
+    toplam_satis = kup.stok_satis['satis'].sum() if 'satis' in kup.stok_satis.columns else 0
+    toplam_ciro = kup.stok_satis['ciro'].sum() if 'ciro' in kup.stok_satis.columns else 0
+    toplam_kar = kup.stok_satis['kar'].sum() if 'kar' in kup.stok_satis.columns else 0
     
     sonuc.append(f"📦 Toplam Mağaza Stok: {toplam_stok:,.0f} adet")
     sonuc.append(f"🛒 Toplam Satış: {toplam_satis:,.0f} adet")
@@ -490,7 +490,14 @@ def sevkiyat_plani(kup: KupVeri, limit: int = 50) -> str:
     sonuc = []
     sonuc.append("=== SEVKİYAT PLANI ===\n")
     
+    # Mevcut kolonları kontrol et
+    kolonlar = list(kup.stok_satis.columns)
+    sonuc.append(f"Debug - Mevcut kolonlar: {kolonlar[:10]}...\n")
+    
     # Sevk gereken satırlar
+    if 'stok_durum' not in kup.stok_satis.columns:
+        return "❌ Stok durumu hesaplanamamış."
+    
     sevk_gerekli = kup.stok_satis[kup.stok_satis['stok_durum'] == 'SEVK_GEREKLI'].copy()
     
     if len(sevk_gerekli) == 0:
@@ -498,24 +505,43 @@ def sevkiyat_plani(kup: KupVeri, limit: int = 50) -> str:
     
     sonuc.append(f"Toplam sevk gereken: {len(sevk_gerekli):,} mağaza×ürün kombinasyonu\n")
     
-    # Ürün bazlı önceliklendirme (satışa göre)
-    urun_oncelik = sevk_gerekli.groupby('urun_kod').agg({
-        'magaza_kod': 'count',
-        'satis': 'sum',
-        'stok': 'sum',
-        'min_deger': 'first'
-    }).reset_index()
-    urun_oncelik.columns = ['urun_kod', 'magaza_sayisi', 'toplam_satis', 'toplam_stok', 'min_deger']
-    urun_oncelik['eksik'] = urun_oncelik['magaza_sayisi'] * urun_oncelik['min_deger'].fillna(3) - urun_oncelik['toplam_stok']
-    urun_oncelik = urun_oncelik.sort_values('toplam_satis', ascending=False).head(limit)
+    # Ürün bazlı önceliklendirme - dinamik kolon kullanımı
+    agg_dict = {}
+    if 'magaza_kod' in sevk_gerekli.columns:
+        agg_dict['magaza_kod'] = 'count'
+    if 'satis' in sevk_gerekli.columns:
+        agg_dict['satis'] = 'sum'
+    if 'stok' in sevk_gerekli.columns:
+        agg_dict['stok'] = 'sum'
+    if 'min_deger' in sevk_gerekli.columns:
+        agg_dict['min_deger'] = 'first'
+    
+    if len(agg_dict) == 0 or 'urun_kod' not in sevk_gerekli.columns:
+        return "❌ Gerekli kolonlar bulunamadı."
+    
+    urun_oncelik = sevk_gerekli.groupby('urun_kod').agg(agg_dict).reset_index()
+    
+    # Kolon isimlerini düzelt
+    rename_map = {'magaza_kod': 'magaza_sayisi', 'satis': 'toplam_satis', 'stok': 'toplam_stok'}
+    urun_oncelik = urun_oncelik.rename(columns=rename_map)
+    
+    # Eksik hesapla
+    if 'magaza_sayisi' in urun_oncelik.columns and 'min_deger' in urun_oncelik.columns:
+        urun_oncelik['eksik'] = urun_oncelik['magaza_sayisi'] * urun_oncelik['min_deger'].fillna(3) - urun_oncelik.get('toplam_stok', 0)
+    else:
+        urun_oncelik['eksik'] = 0
+    
+    # Sıralama
+    if 'toplam_satis' in urun_oncelik.columns:
+        urun_oncelik = urun_oncelik.sort_values('toplam_satis', ascending=False).head(limit)
+    else:
+        urun_oncelik = urun_oncelik.head(limit)
     
     # Depo stok kontrolü
-    if len(kup.depo_stok) > 0:
-        urun_oncelik = urun_oncelik.merge(
-            kup.depo_stok.groupby('urun_kod')['stok'].sum().reset_index().rename(columns={'stok': 'depo_stok'}),
-            on='urun_kod',
-            how='left'
-        )
+    if len(kup.depo_stok) > 0 and 'urun_kod' in kup.depo_stok.columns:
+        depo_grouped = kup.depo_stok.groupby('urun_kod')['stok'].sum().reset_index()
+        depo_grouped.columns = ['urun_kod', 'depo_stok']
+        urun_oncelik = urun_oncelik.merge(depo_grouped, on='urun_kod', how='left')
         urun_oncelik['depo_stok'] = urun_oncelik['depo_stok'].fillna(0)
     else:
         urun_oncelik['depo_stok'] = 0
@@ -524,21 +550,30 @@ def sevkiyat_plani(kup: KupVeri, limit: int = 50) -> str:
     sonuc.append("-" * 75)
     
     for _, row in urun_oncelik.iterrows():
-        if row['depo_stok'] >= row['eksik']:
+        magaza_s = row.get('magaza_sayisi', 0)
+        toplam_s = row.get('toplam_satis', 0)
+        eksik = row.get('eksik', 0)
+        depo = row.get('depo_stok', 0)
+        
+        if depo >= eksik:
             durum = "✅ Sevk edilebilir"
-        elif row['depo_stok'] > 0:
+        elif depo > 0:
             durum = "🟡 Kısmi sevk"
         else:
             durum = "🔴 Depoda yok"
         
-        sonuc.append(f"{row['urun_kod']:<12} | {row['magaza_sayisi']:>8,} | {row['toplam_satis']:>8,.0f} | {row['eksik']:>8,.0f} | {row['depo_stok']:>8,.0f} | {durum}")
+        sonuc.append(f"{row['urun_kod']:<12} | {magaza_s:>8,} | {toplam_s:>8,.0f} | {eksik:>8,.0f} | {depo:>8,.0f} | {durum}")
     
     # Özet
-    sevk_edilebilir = len(urun_oncelik[urun_oncelik['depo_stok'] >= urun_oncelik['eksik']])
-    sonuc.append(f"\n--- Özet ---")
-    sonuc.append(f"✅ Tam sevk edilebilir: {sevk_edilebilir} ürün")
-    sonuc.append(f"🟡 Kısmi sevk: {len(urun_oncelik[(urun_oncelik['depo_stok'] > 0) & (urun_oncelik['depo_stok'] < urun_oncelik['eksik'])])} ürün")
-    sonuc.append(f"🔴 Depoda yok: {len(urun_oncelik[urun_oncelik['depo_stok'] == 0])} ürün")
+    if 'eksik' in urun_oncelik.columns:
+        sevk_edilebilir = len(urun_oncelik[urun_oncelik['depo_stok'] >= urun_oncelik['eksik']])
+        kismi = len(urun_oncelik[(urun_oncelik['depo_stok'] > 0) & (urun_oncelik['depo_stok'] < urun_oncelik['eksik'])])
+        depoda_yok = len(urun_oncelik[urun_oncelik['depo_stok'] == 0])
+        
+        sonuc.append(f"\n--- Özet ---")
+        sonuc.append(f"✅ Tam sevk edilebilir: {sevk_edilebilir} ürün")
+        sonuc.append(f"🟡 Kısmi sevk: {kismi} ürün")
+        sonuc.append(f"🔴 Depoda yok: {depoda_yok} ürün")
     
     return "\n".join(sonuc)
 
