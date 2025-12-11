@@ -584,6 +584,9 @@ def fazla_stok_analiz(kup: KupVeri, limit: int = 50) -> str:
     sonuc = []
     sonuc.append("=== FAZLA STOK ANALİZİ (İNDİRİM ADAYLARI) ===\n")
     
+    if 'stok_durum' not in kup.stok_satis.columns:
+        return "❌ Stok durumu hesaplanamamış."
+    
     # Fazla stok ve yavaş dönen
     fazla = kup.stok_satis[kup.stok_satis['stok_durum'].isin(['FAZLA_STOK', 'YAVAS'])].copy()
     
@@ -592,29 +595,57 @@ def fazla_stok_analiz(kup: KupVeri, limit: int = 50) -> str:
     
     sonuc.append(f"Toplam fazla/yavaş stok: {len(fazla):,} mağaza×ürün kombinasyonu\n")
     
-    # Ürün bazlı özet
-    urun_ozet = fazla.groupby('urun_kod').agg({
-        'magaza_kod': 'count',
-        'stok': 'sum',
-        'satis': 'sum',
-        'ciro': 'sum'
-    }).reset_index()
-    urun_ozet.columns = ['urun_kod', 'magaza_sayisi', 'toplam_stok', 'toplam_satis', 'toplam_ciro']
-    urun_ozet['cover'] = urun_ozet['toplam_stok'] / (urun_ozet['toplam_satis'] + 0.1)
-    urun_ozet = urun_ozet.sort_values('toplam_stok', ascending=False).head(limit)
+    # Ürün bazlı özet - dinamik kolon kullanımı
+    if 'urun_kod' not in fazla.columns:
+        return "❌ urun_kod kolonu bulunamadı."
+    
+    agg_dict = {}
+    if 'magaza_kod' in fazla.columns:
+        agg_dict['magaza_kod'] = 'count'
+    if 'stok' in fazla.columns:
+        agg_dict['stok'] = 'sum'
+    if 'satis' in fazla.columns:
+        agg_dict['satis'] = 'sum'
+    if 'ciro' in fazla.columns:
+        agg_dict['ciro'] = 'sum'
+    
+    if len(agg_dict) == 0:
+        return "❌ Gerekli kolonlar bulunamadı."
+    
+    urun_ozet = fazla.groupby('urun_kod').agg(agg_dict).reset_index()
+    
+    # Kolon isimlerini düzelt
+    rename_map = {'magaza_kod': 'magaza_sayisi', 'stok': 'toplam_stok', 'satis': 'toplam_satis', 'ciro': 'toplam_ciro'}
+    urun_ozet = urun_ozet.rename(columns=rename_map)
+    
+    # Cover hesapla
+    if 'toplam_stok' in urun_ozet.columns and 'toplam_satis' in urun_ozet.columns:
+        urun_ozet['cover'] = urun_ozet['toplam_stok'] / (urun_ozet['toplam_satis'] + 0.1)
+    else:
+        urun_ozet['cover'] = 0
+    
+    if 'toplam_stok' in urun_ozet.columns:
+        urun_ozet = urun_ozet.sort_values('toplam_stok', ascending=False).head(limit)
+    else:
+        urun_ozet = urun_ozet.head(limit)
     
     sonuc.append(f"{'Ürün Kodu':<12} | {'Mağaza#':>8} | {'Stok':>10} | {'Satış':>8} | {'Cover':>8} | Öneri")
     sonuc.append("-" * 75)
     
     for _, row in urun_ozet.iterrows():
-        if row['cover'] > 52:
+        cover = row.get('cover', 0)
+        if cover > 52:
             oneri = "🔴 Agresif indirim"
-        elif row['cover'] > 26:
+        elif cover > 26:
             oneri = "🟡 Kampanya"
         else:
             oneri = "🟢 İzle"
         
-        sonuc.append(f"{row['urun_kod']:<12} | {row['magaza_sayisi']:>8,} | {row['toplam_stok']:>10,.0f} | {row['toplam_satis']:>8,.0f} | {row['cover']:>7.1f}hf | {oneri}")
+        magaza_s = row.get('magaza_sayisi', 0)
+        toplam_stok = row.get('toplam_stok', 0)
+        toplam_satis = row.get('toplam_satis', 0)
+        
+        sonuc.append(f"{row['urun_kod']:<12} | {magaza_s:>8,} | {toplam_stok:>10,.0f} | {toplam_satis:>8,.0f} | {cover:>7.1f}hf | {oneri}")
     
     return "\n".join(sonuc)
 
@@ -628,26 +659,55 @@ def bolge_karsilastir(kup: KupVeri) -> str:
     sonuc = []
     sonuc.append("=== BÖLGE KARŞILAŞTIRMASI ===\n")
     
-    bolge_ozet = kup.stok_satis.groupby('bolge').agg({
-        'magaza_kod': 'nunique',
-        'urun_kod': 'nunique',
-        'stok': 'sum',
-        'satis': 'sum',
-        'ciro': 'sum',
-        'kar': 'sum'
-    }).reset_index()
-    bolge_ozet.columns = ['Bolge', 'Magaza', 'Urun', 'Stok', 'Satis', 'Ciro', 'Kar']
-    bolge_ozet['Kar_Marji'] = bolge_ozet['Kar'] / (bolge_ozet['Ciro'] + 0.01) * 100
-    bolge_ozet['Cover'] = bolge_ozet['Stok'] / (bolge_ozet['Satis'] + 0.1)
-    bolge_ozet = bolge_ozet.sort_values('Ciro', ascending=False)
+    # Dinamik agg dict
+    agg_dict = {}
+    if 'magaza_kod' in kup.stok_satis.columns:
+        agg_dict['magaza_kod'] = 'nunique'
+    if 'urun_kod' in kup.stok_satis.columns:
+        agg_dict['urun_kod'] = 'nunique'
+    if 'stok' in kup.stok_satis.columns:
+        agg_dict['stok'] = 'sum'
+    if 'satis' in kup.stok_satis.columns:
+        agg_dict['satis'] = 'sum'
+    if 'ciro' in kup.stok_satis.columns:
+        agg_dict['ciro'] = 'sum'
+    if 'kar' in kup.stok_satis.columns:
+        agg_dict['kar'] = 'sum'
+    
+    if len(agg_dict) == 0:
+        return "❌ Gerekli kolonlar bulunamadı."
+    
+    bolge_ozet = kup.stok_satis.groupby('bolge').agg(agg_dict).reset_index()
+    
+    # Kolon isimlerini düzelt
+    rename_map = {'magaza_kod': 'Magaza', 'urun_kod': 'Urun', 'stok': 'Stok', 'satis': 'Satis', 'ciro': 'Ciro', 'kar': 'Kar'}
+    bolge_ozet = bolge_ozet.rename(columns=rename_map)
+    bolge_ozet = bolge_ozet.rename(columns={'bolge': 'Bolge'})
+    
+    if 'Kar' in bolge_ozet.columns and 'Ciro' in bolge_ozet.columns:
+        bolge_ozet['Kar_Marji'] = bolge_ozet['Kar'] / (bolge_ozet['Ciro'] + 0.01) * 100
+    else:
+        bolge_ozet['Kar_Marji'] = 0
+    
+    if 'Stok' in bolge_ozet.columns and 'Satis' in bolge_ozet.columns:
+        bolge_ozet['Cover'] = bolge_ozet['Stok'] / (bolge_ozet['Satis'] + 0.1)
+    else:
+        bolge_ozet['Cover'] = 0
+    
+    if 'Ciro' in bolge_ozet.columns:
+        bolge_ozet = bolge_ozet.sort_values('Ciro', ascending=False)
     
     sonuc.append(f"{'Bölge':<15} | {'Mağaza':>7} | {'Ciro':>12} | {'Kar %':>7} | {'Cover':>7}")
     sonuc.append("-" * 60)
     
     for _, row in bolge_ozet.iterrows():
-        if pd.notna(row['Bolge']):
-            durum = "✅" if row['Kar_Marji'] > 0 else "🔴"
-            sonuc.append(f"{durum} {str(row['Bolge']):<13} | {row['Magaza']:>7,} | {row['Ciro']:>12,.0f} | {row['Kar_Marji']:>6.1f}% | {row['Cover']:>6.1f}hf")
+        if pd.notna(row.get('Bolge')):
+            durum = "✅" if row.get('Kar_Marji', 0) > 0 else "🔴"
+            magaza = row.get('Magaza', 0)
+            ciro = row.get('Ciro', 0)
+            kar_marji = row.get('Kar_Marji', 0)
+            cover = row.get('Cover', 0)
+            sonuc.append(f"{durum} {str(row['Bolge']):<13} | {magaza:>7,} | {ciro:>12,.0f} | {kar_marji:>6.1f}% | {cover:>6.1f}hf")
     
     return "\n".join(sonuc)
 
