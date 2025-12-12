@@ -140,54 +140,83 @@ class KupVeri:
         if len(self.stok_satis) == 0:
             return
         
-        # Kolon isimlerini lowercase yap (tutarlılık için)
-        self.stok_satis.columns = self.stok_satis.columns.str.lower().str.strip()
+        # BOM karakterini temizle ve kolon isimlerini normalize et
+        def temizle_kolonlar(df):
+            df.columns = df.columns.str.replace('\ufeff', '').str.lower().str.strip()
+            return df
+        
+        self.stok_satis = temizle_kolonlar(self.stok_satis)
         if len(self.urun_master) > 0:
-            self.urun_master.columns = self.urun_master.columns.str.lower().str.strip()
+            self.urun_master = temizle_kolonlar(self.urun_master)
         if len(self.magaza_master) > 0:
-            self.magaza_master.columns = self.magaza_master.columns.str.lower().str.strip()
+            self.magaza_master = temizle_kolonlar(self.magaza_master)
         if len(self.depo_stok) > 0:
-            self.depo_stok.columns = self.depo_stok.columns.str.lower().str.strip()
+            self.depo_stok = temizle_kolonlar(self.depo_stok)
         if len(self.kpi) > 0:
-            self.kpi.columns = self.kpi.columns.str.lower().str.strip()
+            self.kpi = temizle_kolonlar(self.kpi)
         
-        print(f"   - Stok/Satış kolonları: {list(self.stok_satis.columns)}")
+        print(f"\n🔍 JOIN ÖNCESİ KONTROL:")
+        print(f"   Stok/Satış kolonları: {list(self.stok_satis.columns)}")
+        print(f"   Ürün Master kolonları: {list(self.urun_master.columns) if len(self.urun_master) > 0 else 'BOŞ'}")
+        print(f"   Mağaza Master kolonları: {list(self.magaza_master.columns) if len(self.magaza_master) > 0 else 'BOŞ'}")
         
-        # Ürün master ile join (sadece mevcut kolonları al)
+        # Ürün master ile join
         if len(self.urun_master) > 0 and 'urun_kod' in self.stok_satis.columns and 'urun_kod' in self.urun_master.columns:
-            # Veri tiplerini eşitle
-            self.stok_satis['urun_kod'] = self.stok_satis['urun_kod'].astype(str)
-            self.urun_master['urun_kod'] = self.urun_master['urun_kod'].astype(str)
+            # Veri tiplerini eşitle (integer olarak tut, sonra string yap)
+            self.stok_satis['urun_kod'] = pd.to_numeric(self.stok_satis['urun_kod'], errors='coerce').fillna(0).astype(int).astype(str)
+            self.urun_master['urun_kod'] = pd.to_numeric(self.urun_master['urun_kod'], errors='coerce').fillna(0).astype(int).astype(str)
             
             urun_kolonlar = ['urun_kod']
             for kol in ['kategori_kod', 'umg', 'mg', 'marka_kod', 'nitelik', 'durum']:
                 if kol in self.urun_master.columns:
                     urun_kolonlar.append(kol)
             
+            print(f"   Ürün join kolonları: {urun_kolonlar}")
+            print(f"   Stok urun_kod örnek: {self.stok_satis['urun_kod'].head(3).tolist()}")
+            print(f"   Master urun_kod örnek: {self.urun_master['urun_kod'].head(3).tolist()}")
+            
             if len(urun_kolonlar) > 1:
+                before_len = len(self.stok_satis)
                 self.stok_satis = self.stok_satis.merge(
                     self.urun_master[urun_kolonlar],
                     on='urun_kod',
                     how='left'
                 )
+                print(f"   ✅ Ürün join: {before_len} → {len(self.stok_satis)} satır")
+                
+                # Join sonrası kontrol
+                if 'kategori_kod' in self.stok_satis.columns:
+                    non_null = self.stok_satis['kategori_kod'].notna().sum()
+                    print(f"   kategori_kod dolu: {non_null:,} / {len(self.stok_satis):,}")
         
-        # Mağaza master ile join (sadece mevcut kolonları al)
+        # Mağaza master ile join
         if len(self.magaza_master) > 0 and 'magaza_kod' in self.stok_satis.columns and 'magaza_kod' in self.magaza_master.columns:
             # Veri tiplerini eşitle
-            self.stok_satis['magaza_kod'] = self.stok_satis['magaza_kod'].astype(str)
-            self.magaza_master['magaza_kod'] = self.magaza_master['magaza_kod'].astype(str)
+            self.stok_satis['magaza_kod'] = pd.to_numeric(self.stok_satis['magaza_kod'], errors='coerce').fillna(0).astype(int).astype(str)
+            self.magaza_master['magaza_kod'] = pd.to_numeric(self.magaza_master['magaza_kod'], errors='coerce').fillna(0).astype(int).astype(str)
             
             mag_kolonlar = ['magaza_kod']
             for kol in ['il', 'bolge', 'tip', 'depo_kod']:
                 if kol in self.magaza_master.columns:
                     mag_kolonlar.append(kol)
             
+            print(f"   Mağaza join kolonları: {mag_kolonlar}")
+            print(f"   Stok magaza_kod örnek: {self.stok_satis['magaza_kod'].head(3).tolist()}")
+            print(f"   Master magaza_kod örnek: {self.magaza_master['magaza_kod'].head(3).tolist()}")
+            
             if len(mag_kolonlar) > 1:
+                before_len = len(self.stok_satis)
                 self.stok_satis = self.stok_satis.merge(
                     self.magaza_master[mag_kolonlar],
                     on='magaza_kod',
                     how='left'
                 )
+                print(f"   ✅ Mağaza join: {before_len} → {len(self.stok_satis)} satır")
+                
+                # Join sonrası kontrol
+                if 'bolge' in self.stok_satis.columns:
+                    non_null = self.stok_satis['bolge'].notna().sum()
+                    print(f"   bolge dolu: {non_null:,} / {len(self.stok_satis):,}")
         
         # KPI ile join (mg bazlı)
         if len(self.kpi) > 0 and 'mg' in self.stok_satis.columns:
@@ -197,14 +226,15 @@ class KupVeri:
             
             if 'mg' in kpi_df.columns:
                 # Veri tiplerini eşitle
-                self.stok_satis['mg'] = self.stok_satis['mg'].astype(str)
-                kpi_df['mg'] = kpi_df['mg'].astype(str)
+                self.stok_satis['mg'] = pd.to_numeric(self.stok_satis['mg'], errors='coerce').fillna(0).astype(int).astype(str)
+                kpi_df['mg'] = pd.to_numeric(kpi_df['mg'], errors='coerce').fillna(0).astype(int).astype(str)
                 
                 self.stok_satis = self.stok_satis.merge(
                     kpi_df,
                     on='mg',
                     how='left'
                 )
+                print(f"   ✅ KPI join tamamlandı")
         
         # Kar hesapla (kolonlar varsa)
         if 'ciro' in self.stok_satis.columns and 'smm' in self.stok_satis.columns:
@@ -263,7 +293,19 @@ class KupVeri:
         mask_cover = self.stok_satis['cover'] > self.stok_satis['forward_cover'].fillna(4) * 3
         self.stok_satis.loc[mask_cover & (self.stok_satis['stok_durum'] == 'NORMAL'), 'stok_durum'] = 'YAVAS'
         
-        print(f"   - Stok/Satış kolonları: {list(self.stok_satis.columns)}")
+        # Detaylı debug bilgisi
+        print(f"\n📊 VERİ DURUMU:")
+        print(f"   - Toplam kayıt: {len(self.stok_satis):,}")
+        print(f"   - Kolonlar: {list(self.stok_satis.columns)}")
+        
+        # Kritik kolonları kontrol et
+        for kol in ['magaza_kod', 'urun_kod', 'kategori_kod', 'mg', 'bolge']:
+            if kol in self.stok_satis.columns:
+                non_null = self.stok_satis[kol].notna().sum()
+                unique_vals = self.stok_satis[kol].dropna().unique()[:5]
+                print(f"   ✅ {kol}: {non_null:,} dolu, örnek değerler: {list(unique_vals)}")
+            else:
+                print(f"   ❌ {kol}: KOLON YOK")
 
 
 # =============================================================================
