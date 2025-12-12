@@ -1199,24 +1199,36 @@ Türkçe yanıt ver. Bulgularını net ve aksiyona dönük şekilde sun. Her zam
 def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
     """Agent'ı çalıştır ve sonuç al"""
     
-    client = anthropic.Anthropic(api_key=api_key)
+    import time
+    start_time = time.time()
+    
+    client = anthropic.Anthropic(api_key=api_key, timeout=120.0)  # 2 dakika timeout
     
     messages = [{"role": "user", "content": kullanici_mesaji}]
     
     tum_cevaplar = []
-    max_iterasyon = 10
+    max_iterasyon = 5  # 10'dan 5'e düşürdüm
     iterasyon = 0
     
     while iterasyon < max_iterasyon:
         iterasyon += 1
         
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4096,
-            system=SYSTEM_PROMPT,
-            tools=TOOLS,
-            messages=messages
-        )
+        # Süre kontrolü - 90 saniyeyi geçerse dur
+        if time.time() - start_time > 90:
+            tum_cevaplar.append("\n⏱️ Zaman limiti aşıldı. Mevcut bulgular yukarıda.")
+            break
+        
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=2048,
+                system=SYSTEM_PROMPT,
+                tools=TOOLS,
+                messages=messages
+            )
+        except Exception as api_error:
+            tum_cevaplar.append(f"\n❌ API Hatası: {str(api_error)}")
+            break
         
         # Text içeriklerini topla
         for block in response.content:
