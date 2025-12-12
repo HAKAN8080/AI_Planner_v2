@@ -92,29 +92,60 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Veri Yükleme
-    st.subheader("📊 Veri Yükle (CSV)")
+    # Veri Yükleme - FILE UPLOAD
+    st.subheader("📊 Veri Yükle")
     
-    st.caption("CSV dosyalarının olduğu klasör yolunu gir")
+    st.caption("CSV ve Excel dosyalarını yükleyin")
     
-    veri_klasoru = st.text_input(
-        "Veri Klasörü",
-        value="./data",
-        help="anlik_stok_satis*.csv, urun_master.csv, magaza_master.csv, depo_stok.csv, kpi.csv dosyalarının bulunduğu klasör"
+    # Dosya upload alanları
+    uploaded_files = st.file_uploader(
+        "Dosyaları seçin",
+        type=['csv', 'xlsx', 'xls'],
+        accept_multiple_files=True,
+        help="anlik_stok_satis.csv, urun_master.csv, magaza_master.csv, depo_stok.csv, kpi.csv, trading.xlsx, SC Tablosu.xlsx"
     )
     
-    if st.button("📂 Veriyi Yükle", use_container_width=True):
-        try:
-            from agent_tools import KupVeri
-            with st.spinner("Veri yükleniyor..."):
-                st.session_state['kup'] = KupVeri(veri_klasoru)
-                st.session_state['kup_yuklendi'] = True
-            st.success("✅ Veri yüklendi!")
-        except Exception as e:
-            st.error(f"❌ Hata: {str(e)}")
+    if uploaded_files:
+        if st.button("📂 Veriyi Yükle", use_container_width=True):
+            try:
+                import tempfile
+                import os
+                from agent_tools import KupVeri
+                
+                # Geçici klasör oluştur
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    # Dosyaları geçici klasöre kaydet
+                    for uploaded_file in uploaded_files:
+                        file_path = os.path.join(temp_dir, uploaded_file.name)
+                        with open(file_path, 'wb') as f:
+                            f.write(uploaded_file.getbuffer())
+                        st.caption(f"✅ {uploaded_file.name}")
+                    
+                    # KupVeri ile yükle
+                    with st.spinner("Veri işleniyor..."):
+                        st.session_state['kup'] = KupVeri(temp_dir)
+                        st.session_state['kup_yuklendi'] = True
+                
+                st.success("✅ Veri yüklendi!")
+                st.rerun()
+                
+            except Exception as e:
+                import traceback
+                st.error(f"❌ Hata: {str(e)}")
+                st.code(traceback.format_exc())
     
-    if 'kup_yuklendi' in st.session_state and st.session_state['kup_yuklendi']:
+    # Veri durumu göster
+    if st.session_state.get('kup_yuklendi') and 'kup' in st.session_state:
         st.success("✅ Veri hazır")
+        kup = st.session_state['kup']
+        st.caption(f"📦 Stok/Satış: {len(kup.stok_satis):,} satır")
+        st.caption(f"🏭 Depo: {len(kup.depo_stok):,} satır")
+        if len(kup.trading) > 0:
+            st.caption(f"📈 Trading: {len(kup.trading):,} satır")
+        if len(kup.sc_sayfalari) > 0:
+            st.caption(f"📊 SC Tablosu: {len(kup.sc_sayfalari)} sayfa")
+    else:
+        st.info("👆 Dosyaları yükleyin ve 'Veriyi Yükle' butonuna basın")
     
     st.markdown("---")
     
