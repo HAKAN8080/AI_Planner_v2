@@ -1206,7 +1206,7 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
     print(f"   API Key: {api_key[:20]}...")
     
     try:
-        client = anthropic.Anthropic(api_key=api_key, timeout=60.0)
+        client = anthropic.Anthropic(api_key=api_key, timeout=30.0)  # 30 saniye timeout
         print("   ✅ Anthropic client oluşturuldu")
     except Exception as e:
         print(f"   ❌ Client hatası: {e}")
@@ -1215,23 +1215,24 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
     messages = [{"role": "user", "content": kullanici_mesaji}]
     
     tum_cevaplar = []
-    max_iterasyon = 5
+    max_iterasyon = 3  # 5'ten 3'e düşürdüm
     iterasyon = 0
     
     while iterasyon < max_iterasyon:
         iterasyon += 1
         print(f"\n   📡 İterasyon {iterasyon} - API çağrısı yapılıyor...")
         
-        # Süre kontrolü - 60 saniyeyi geçerse dur
-        if time.time() - start_time > 60:
-            print("   ⏱️ Zaman aşımı!")
+        # Süre kontrolü - 45 saniyeyi geçerse dur
+        elapsed = time.time() - start_time
+        if elapsed > 45:
+            print(f"   ⏱️ Zaman aşımı! ({elapsed:.1f}s)")
             tum_cevaplar.append("\n⏱️ Zaman limiti aşıldı.")
             break
         
         try:
             response = client.messages.create(
                 model="claude-sonnet-4-20250514",
-                max_tokens=2048,
+                max_tokens=1024,  # 2048'den 1024'e düşürdüm
                 system=SYSTEM_PROMPT,
                 tools=TOOLS,
                 messages=messages
@@ -1272,7 +1273,7 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
                 elif tool_name == "cover_analiz":
                     tool_result = cover_analiz(kup, tool_input.get("sayfa", None))
                 elif tool_name == "ihtiyac_hesapla":
-                    tool_result = ihtiyac_hesapla(kup, tool_input.get("limit", 50))
+                    tool_result = ihtiyac_hesapla(kup, tool_input.get("limit", 30))
                 elif tool_name == "kategori_analiz":
                     tool_result = kategori_analiz(kup, tool_input.get("kategori_kod", ""))
                 elif tool_name == "magaza_analiz":
@@ -1280,15 +1281,25 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
                 elif tool_name == "urun_analiz":
                     tool_result = urun_analiz(kup, tool_input.get("urun_kod", ""))
                 elif tool_name == "sevkiyat_plani":
-                    tool_result = sevkiyat_plani(kup, tool_input.get("limit", 50))
+                    tool_result = sevkiyat_plani(kup, tool_input.get("limit", 30))
                 elif tool_name == "fazla_stok_analiz":
-                    tool_result = fazla_stok_analiz(kup, tool_input.get("limit", 50))
+                    tool_result = fazla_stok_analiz(kup, tool_input.get("limit", 30))
                 elif tool_name == "bolge_karsilastir":
                     tool_result = bolge_karsilastir(kup)
                 else:
                     tool_result = f"Bilinmeyen araç: {tool_name}"
+                
+                # Sonucu logla
+                print(f"      🔧 {tool_name}: {len(tool_result)} karakter")
+                
+                # Sonuç çok uzunsa kısalt (API limiti için)
+                if len(tool_result) > 8000:
+                    tool_result = tool_result[:8000] + "\n\n... (kısaltıldı)"
+                    print(f"      ⚠️ Sonuç kısaltıldı: 8000 karakter")
+                    
             except Exception as e:
                 tool_result = f"Hata: {str(e)}"
+                print(f"      ❌ Tool hatası: {e}")
             
             tool_results.append({
                 "type": "tool_result",
