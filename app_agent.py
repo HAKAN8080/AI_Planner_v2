@@ -15,14 +15,14 @@ import asyncio
 # ============================================
 # 🔊 TTS (Text-to-Speech) FONKSİYONU - EDGE TTS
 # ============================================
-def sesli_oku(metin: str, ses: str = "tr-TR-MertNeural") -> str:
+def sesli_oku(metin: str, ses: str = "tr-TR-AhmetNeural") -> str:
     """
     Metni Türkçe sese çevirir ve HTML audio player döner.
     Edge TTS kullanır - ÜCRETSİZ ve kaliteli!
     
     Ses seçenekleri:
-    - tr-TR-MertNeural (Erkek - varsayılan)
-    - tr-TR-MeralNeural (Kadın)
+    - tr-TR-AhmetNeural (Erkek - varsayılan)
+    - tr-TR-EmelNeural (Kadın)
     """
     try:
         import edge_tts
@@ -222,14 +222,14 @@ with st.sidebar:
     if sesli_aktif:
         ses_secimi = st.radio(
             "Ses seçin:",
-            options=["👨 Mert (Erkek)", "👩 Meral (Kadın)"],
+            options=["👨 Erol (Erkek)", "👩 Eftelya (Kadın)"],
             horizontal=True
         )
-        if "Mert" in ses_secimi:
-            st.session_state['ses_turu'] = "tr-TR-MertNeural"
+        if "Erol" in ses_secimi:
+            st.session_state['ses_turu'] = "tr-TR-AhmetNeural"
         else:
-            st.session_state['ses_turu'] = "tr-TR-MeralNeural"
-        st.caption("🎧 Microsoft Edge TTS - Doğal Türkçe ses")
+            st.session_state['ses_turu'] = "tr-TR-EmelNeural"
+        st.caption("🎧 Sanal Planner Sesi - Doğal Türkçe")
     
     st.markdown("---")
     
@@ -306,7 +306,7 @@ if mesaj:
                     
                     # 🔊 Sesli okuma aktifse oku
                     if st.session_state.get('sesli_aktif', False):
-                        ses_turu = st.session_state.get('ses_turu', 'tr-TR-MertNeural')
+                        ses_turu = st.session_state.get('ses_turu', 'tr-TR-AhmetNeural')
                         audio_html = sesli_oku(sonuc, ses=ses_turu)
                         st.markdown(audio_html, unsafe_allow_html=True)
                 else:
