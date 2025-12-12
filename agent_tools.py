@@ -1206,7 +1206,7 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
     print(f"   API Key: {api_key[:20]}...")
     
     try:
-        client = anthropic.Anthropic(api_key=api_key, timeout=30.0)  # 30 saniye timeout
+        client = anthropic.Anthropic(api_key=api_key, timeout=60.0)  # 60 saniye timeout
         print("   ✅ Anthropic client oluşturuldu")
     except Exception as e:
         print(f"   ❌ Client hatası: {e}")
@@ -1215,16 +1215,16 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
     messages = [{"role": "user", "content": kullanici_mesaji}]
     
     tum_cevaplar = []
-    max_iterasyon = 3  # 5'ten 3'e düşürdüm
+    max_iterasyon = 8  # 3'ten 8'e çıkardım
     iterasyon = 0
     
     while iterasyon < max_iterasyon:
         iterasyon += 1
         print(f"\n   📡 İterasyon {iterasyon} - API çağrısı yapılıyor...")
         
-        # Süre kontrolü - 45 saniyeyi geçerse dur
+        # Süre kontrolü - 90 saniyeyi geçerse dur
         elapsed = time.time() - start_time
-        if elapsed > 45:
+        if elapsed > 90:
             print(f"   ⏱️ Zaman aşımı! ({elapsed:.1f}s)")
             tum_cevaplar.append("\n⏱️ Zaman limiti aşıldı.")
             break
@@ -1232,7 +1232,7 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
         try:
             response = client.messages.create(
                 model="claude-sonnet-4-20250514",
-                max_tokens=1024,  # 2048'den 1024'e düşürdüm
+                max_tokens=2048,  # 1024'ten 2048'e çıkardım
                 system=SYSTEM_PROMPT,
                 tools=TOOLS,
                 messages=messages
