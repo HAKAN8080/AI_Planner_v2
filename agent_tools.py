@@ -321,59 +321,96 @@ def trading_analiz(kup: KupVeri) -> str:
     sonuc = []
     df = kup.trading.copy()
     
-    # Kolon isimlerini lowercase yap
-    df.columns = df.columns.str.strip()
+    # Kolon isimlerini olduğu gibi tut (case sensitive olabilir)
+    kolonlar = list(df.columns)
     
     # Debug - kolonları göster
-    print(f"Trading kolonları: {list(df.columns)[:15]}")
+    print(f"Trading kolonları: {kolonlar[:20]}")
     
-    # Kategori kolonu bul
+    # Kategori kolonu bul (ilk kolon genellikle)
     kategori_kol = None
     for kol in df.columns:
         kol_lower = str(kol).lower()
-        if 'satır' in kol_lower or 'kategori' in kol_lower or 'category' in kol_lower:
+        if 'satır' in kol_lower or 'etiket' in kol_lower or 'kategori' in kol_lower:
             kategori_kol = kol
             break
     if kategori_kol is None:
         kategori_kol = df.columns[0]
     
-    # EVE Kozmetik kolonlarını bul
+    # EVE Kozmetik kolonlarını bul - EXACT MATCH öncelikli
     kolon_map = {
-        'ciro_butce': None,      # Achieved TY Sales Budget Value TRY
-        'kar_butce': None,       # Achieved TY Sales Budget Profit Value TRY
-        'ly_cover': None,        # LY Store Back Cover
-        'ty_cover': None,        # TY Store Back Cover
-        'stok_lfl': None,        # LFL Store Stock Unit TYvsLY%
-        'satis_lfl': None,       # LFL Sales Value TYvsLY LC%
-        'maliyet_lfl': None,     # LFL Sales Unit Cost TYvsLY LC%
+        'ciro_butce_achieved': None,   # Achieved TY Sales Budget Value TRY (-17%, -23% gibi)
+        'adet_butce_achieved': None,   # Achieved TY Sales Budget Unit (-3%, -10% gibi)
+        'kar_butce_achieved': None,    # Achieved TY Sales Budget Profit Value TRY
+        'ciro_butce_gap': None,        # TY Sales Budget Value TRY Gap
+        'adet_butce_gap': None,        # TY Budget Unit Gap
+        'ly_cover': None,              # LY Store Back Cover
+        'ty_cover': None,              # TY Store Back Cover
+        'stok_lfl': None,              # LFL Store Stock Unit TYvsLY%
+        'satis_lfl': None,             # LFL Sales Value TYvsLY LC%
+        'maliyet_lfl': None,           # LFL Sales Unit Cost TYvsLY LC%
     }
     
     for kol in df.columns:
-        kol_lower = str(kol).lower()
+        kol_str = str(kol)
+        kol_lower = kol_str.lower()
         
-        # Ciro bütçe sapması
-        if 'achieved' in kol_lower and 'sales' in kol_lower and 'budget' in kol_lower and 'value' in kol_lower and 'profit' not in kol_lower:
-            kolon_map['ciro_butce'] = kol
-        # Kar bütçe sapması
-        elif 'achieved' in kol_lower and 'profit' in kol_lower and 'budget' in kol_lower:
-            kolon_map['kar_butce'] = kol
+        # Achieved TY Sales Budget Value TRY (ciro bütçe achieved - % değer)
+        if 'achieved' in kol_lower and 'sales' in kol_lower and 'budget' in kol_lower and 'value' in kol_lower and 'try' in kol_lower and 'profit' not in kol_lower:
+            kolon_map['ciro_butce_achieved'] = kol
+            print(f"  ✅ Ciro Bütçe Achieved: {kol}")
+        
+        # Achieved TY Sales Budget Unit (adet bütçe achieved)
+        elif 'achieved' in kol_lower and 'sales' in kol_lower and 'budget' in kol_lower and 'unit' in kol_lower and 'value' not in kol_lower:
+            kolon_map['adet_butce_achieved'] = kol
+            print(f"  ✅ Adet Bütçe Achieved: {kol}")
+        
+        # Achieved Profit
+        elif 'achieved' in kol_lower and 'profit' in kol_lower:
+            kolon_map['kar_butce_achieved'] = kol
+            print(f"  ✅ Kar Bütçe Achieved: {kol}")
+        
+        # TY Sales Budget Value TRY Gap
+        elif 'budget' in kol_lower and 'value' in kol_lower and 'gap' in kol_lower and 'try' in kol_lower:
+            kolon_map['ciro_butce_gap'] = kol
+        
+        # TY Budget Unit Gap
+        elif 'budget' in kol_lower and 'unit' in kol_lower and 'gap' in kol_lower:
+            kolon_map['adet_butce_gap'] = kol
+        
         # LY Cover
         elif 'ly' in kol_lower and 'cover' in kol_lower and 'store' in kol_lower:
             kolon_map['ly_cover'] = kol
+        
         # TY Cover
-        elif 'ty' in kol_lower and 'cover' in kol_lower and 'store' in kol_lower:
+        elif 'ty' in kol_lower and 'cover' in kol_lower and 'store' in kol_lower and 'lfl' not in kol_lower:
             kolon_map['ty_cover'] = kol
+        
         # Stok LFL
         elif 'lfl' in kol_lower and 'stock' in kol_lower and 'unit' in kol_lower:
             kolon_map['stok_lfl'] = kol
-        # Satış LFL
+        
+        # Satış LFL (Value)
         elif 'lfl' in kol_lower and 'sales' in kol_lower and 'value' in kol_lower:
             kolon_map['satis_lfl'] = kol
+        
         # Maliyet LFL
         elif 'lfl' in kol_lower and 'cost' in kol_lower:
             kolon_map['maliyet_lfl'] = kol
     
     print(f"Bulunan kolonlar: {kolon_map}")
+    
+    # Ana achieved kolonu kontrol
+    achieved_kol = kolon_map['ciro_butce_achieved']
+    if achieved_kol is None:
+        # Fallback - "Achieved" içeren herhangi bir kolon
+        for kol in df.columns:
+            if 'achieved' in str(kol).lower() and 'value' in str(kol).lower():
+                achieved_kol = kol
+                break
+    
+    if achieved_kol is None:
+        return f"❌ 'Achieved TY Sales Budget Value TRY' kolonu bulunamadı.\nMevcut kolonlar: {kolonlar[:15]}"
     
     # Analiz için veri topla
     kritik_kategoriler = []
@@ -384,56 +421,73 @@ def trading_analiz(kup: KupVeri) -> str:
     for _, row in df.iterrows():
         kategori = str(row.get(kategori_kol, 'N/A'))[:35]
         
-        if pd.isna(kategori) or kategori == 'nan' or kategori == 'N/A' or 'total' in kategori.lower() or 'grand' in kategori.lower():
+        if pd.isna(kategori) or kategori == 'nan' or kategori == 'N/A' or 'total' in kategori.lower() or 'grand' in kategori.lower() or 'genel' in kategori.lower():
             continue
         
-        # Değerleri al
-        def get_pct(val):
+        # Achieved değerini al (bu zaten % olarak geliyor: -17%, -23% gibi)
+        def parse_pct(val):
             if pd.isna(val):
-                return 0
-            v = float(val)
-            # Zaten yüzde ise (örn: 85.5 veya -15.2) olduğu gibi kullan
-            # Ondalık ise (örn: 0.855) 100 ile çarp
-            if -2 < v < 2 and v != 0:
-                return v * 100
-            return v
+                return None
+            if isinstance(val, str):
+                # "-17%" gibi string ise
+                val = val.replace('%', '').replace(',', '.').strip()
+                try:
+                    return float(val)
+                except:
+                    return None
+            return float(val)
         
-        ciro_butce = get_pct(row.get(kolon_map['ciro_butce'], 0)) if kolon_map['ciro_butce'] else 0
-        kar_butce = get_pct(row.get(kolon_map['kar_butce'], 0)) if kolon_map['kar_butce'] else 0
+        ciro_achieved = parse_pct(row.get(achieved_kol, None))
+        if ciro_achieved is None:
+            continue
         
-        ly_cover = float(row.get(kolon_map['ly_cover'], 0) or 0) if kolon_map['ly_cover'] else 0
-        ty_cover = float(row.get(kolon_map['ty_cover'], 0) or 0) if kolon_map['ty_cover'] else 0
+        # Eğer değer -1 ile 1 arasındaysa (ondalık) yüzdeye çevir
+        if -1 < ciro_achieved < 1 and ciro_achieved != 0:
+            ciro_achieved = ciro_achieved * 100
+        
+        adet_achieved = parse_pct(row.get(kolon_map['adet_butce_achieved'], None)) if kolon_map['adet_butce_achieved'] else None
+        if adet_achieved and -1 < adet_achieved < 1 and adet_achieved != 0:
+            adet_achieved = adet_achieved * 100
+        
+        kar_achieved = parse_pct(row.get(kolon_map['kar_butce_achieved'], None)) if kolon_map['kar_butce_achieved'] else None
+        
+        ly_cover = parse_pct(row.get(kolon_map['ly_cover'], 0)) or 0
+        ty_cover = parse_pct(row.get(kolon_map['ty_cover'], 0)) or 0
         cover_degisim = ty_cover - ly_cover
         
-        stok_lfl = get_pct(row.get(kolon_map['stok_lfl'], 0)) if kolon_map['stok_lfl'] else 0
-        satis_lfl = get_pct(row.get(kolon_map['satis_lfl'], 0)) if kolon_map['satis_lfl'] else 0
-        maliyet_lfl = get_pct(row.get(kolon_map['maliyet_lfl'], 0)) if kolon_map['maliyet_lfl'] else 0
+        satis_lfl = parse_pct(row.get(kolon_map['satis_lfl'], 0)) or 0
+        if -1 < satis_lfl < 1 and satis_lfl != 0:
+            satis_lfl = satis_lfl * 100
+            
+        maliyet_lfl = parse_pct(row.get(kolon_map['maliyet_lfl'], 0)) or 0
+        if -1 < maliyet_lfl < 1 and maliyet_lfl != 0:
+            maliyet_lfl = maliyet_lfl * 100
         
         kat_data = {
             'kategori': kategori,
-            'ciro_butce': ciro_butce,
-            'kar_butce': kar_butce,
+            'ciro_achieved': ciro_achieved,
+            'adet_achieved': adet_achieved,
+            'kar_achieved': kar_achieved,
             'ly_cover': ly_cover,
             'ty_cover': ty_cover,
             'cover_degisim': cover_degisim,
-            'stok_lfl': stok_lfl,
             'satis_lfl': satis_lfl,
             'maliyet_lfl': maliyet_lfl
         }
         
-        # Bütçe bazlı kategorize et (ciro bütçesi ana gösterge)
-        # Achieved değeri 100'den düşükse hedefin altında
-        butce_sapma = ciro_butce - 100  # 85 → -15% sapma
-        
-        if butce_sapma < -30:
+        # Kategorize et - Achieved değeri negatifse hedefin altında
+        # -17% demek hedefin %17 altında demek
+        if ciro_achieved < -30:
             kritik_kategoriler.append(kat_data)
-        elif butce_sapma < -15:
+        elif ciro_achieved < -15:
             uyari_kategoriler.append(kat_data)
-        elif butce_sapma >= 0:
+        elif ciro_achieved >= 0:
             iyi_kategoriler.append(kat_data)
+        else:
+            uyari_kategoriler.append(kat_data)  # -15 ile 0 arası
         
-        # Maliyet vs Satış oranı kontrolü
-        if maliyet_lfl > satis_lfl + 5:  # Maliyet satıştan hızlı artıyorsa
+        # Maliyet vs Satış kontrolü
+        if maliyet_lfl > satis_lfl + 5:
             maliyet_sorunlu.append(kat_data)
     
     # ANLATIMLI RAPOR
@@ -443,79 +497,68 @@ def trading_analiz(kup: KupVeri) -> str:
     toplam_kat = len(kritik_kategoriler) + len(uyari_kategoriler) + len(iyi_kategoriler)
     
     if len(kritik_kategoriler) > toplam_kat * 0.3:
-        sonuc.append("🚨 GENEL DURUM: Ciddi performans sorunları var. Acil aksiyon gerekiyor.\n")
+        sonuc.append("🚨 GENEL DURUM: Ciddi performans sorunları var. Çoğu kategori bütçenin çok altında.\n")
     elif len(kritik_kategoriler) > 0:
-        sonuc.append("⚠️ GENEL DURUM: Bazı kategorilerde sorun var, dikkat edilmeli.\n")
+        sonuc.append("⚠️ GENEL DURUM: Bazı kategorilerde önemli sapmalar var.\n")
     else:
-        sonuc.append("✅ GENEL DURUM: Performans genel olarak hedef dahilinde.\n")
+        sonuc.append("✅ GENEL DURUM: Performans genel olarak kabul edilebilir seviyede.\n")
     
     # Kritik kategoriler
     if kritik_kategoriler:
         sonuc.append(f"🔴 KRİTİK KATEGORİLER ({len(kritik_kategoriler)} adet)")
-        sonuc.append("Bütçenin %30'dan fazla altında olan kategoriler:\n")
+        sonuc.append("Bütçenin %30'dan fazla altında:\n")
         
-        for kat in sorted(kritik_kategoriler, key=lambda x: x['ciro_butce'])[:5]:
-            sapma = kat['ciro_butce'] - 100
+        for kat in sorted(kritik_kategoriler, key=lambda x: x['ciro_achieved'])[:7]:
             sonuc.append(f"  • {kat['kategori']}")
-            sonuc.append(f"    Ciro Bütçe: %{kat['ciro_butce']:.0f} (hedefin %{abs(sapma):.0f} altında)")
-            sonuc.append(f"    Kar Bütçe: %{kat['kar_butce']:.0f}")
-            
-            if kat['satis_lfl'] < -10:
-                sonuc.append(f"    LFL Satış: %{kat['satis_lfl']:.1f} (geçen yıla göre ciddi düşüş)")
-            
-            # Cover analizi
+            sonuc.append(f"    Ciro Bütçe Achieved: %{kat['ciro_achieved']:.0f} (hedefin %{abs(kat['ciro_achieved']):.0f} altında)")
+            if kat['adet_achieved']:
+                sonuc.append(f"    Adet Bütçe Achieved: %{kat['adet_achieved']:.0f}")
+            if kat['satis_lfl'] != 0:
+                if kat['satis_lfl'] < -10:
+                    sonuc.append(f"    LFL Satış: %{kat['satis_lfl']:.1f} (geçen yıla göre ciddi düşüş)")
+                else:
+                    sonuc.append(f"    LFL Satış: %{kat['satis_lfl']:.1f}")
             if kat['cover_degisim'] > 3:
-                sonuc.append(f"    Cover: {kat['ly_cover']:.1f} → {kat['ty_cover']:.1f} hf (yavaşlama, stok birikiyor)")
-            elif kat['cover_degisim'] < -3:
-                sonuc.append(f"    Cover: {kat['ly_cover']:.1f} → {kat['ty_cover']:.1f} hf (hızlanma)")
-            
-            sonuc.append(f"    → ÖNERİ: Satış kampanyası veya stok optimizasyonu gerekli")
+                sonuc.append(f"    Cover: {kat['ly_cover']:.1f} → {kat['ty_cover']:.1f} hf (stok birikiyor)")
+            sonuc.append(f"    → ÖNERİ: Acil satış kampanyası veya stok optimizasyonu gerekli")
             sonuc.append("")
-    
-    # Maliyet sorunu olanlar
-    if maliyet_sorunlu:
-        sonuc.append(f"\n⚠️ MALİYET UYARISI ({len(maliyet_sorunlu)} kategori)")
-        sonuc.append("Maliyet artışı satış artışından yüksek:\n")
-        
-        for kat in maliyet_sorunlu[:3]:
-            sonuc.append(f"  • {kat['kategori']}")
-            sonuc.append(f"    Maliyet değişimi: %{kat['maliyet_lfl']:.1f}, Satış değişimi: %{kat['satis_lfl']:.1f}")
-            sonuc.append(f"    → Bu kategoride marj baskısı var, fiyat revizyonu düşünülmeli")
     
     # Uyarı kategorileri
     if uyari_kategoriler:
         sonuc.append(f"\n🟡 DİKKAT GEREKTİREN ({len(uyari_kategoriler)} adet)")
-        sonuc.append("Bütçenin %15-30 altında:\n")
+        sonuc.append("Bütçenin %15-30 altında veya hafif altında:\n")
         
-        for kat in sorted(uyari_kategoriler, key=lambda x: x['ciro_butce'])[:5]:
-            sapma = kat['ciro_butce'] - 100
-            sonuc.append(f"  • {kat['kategori']}: Bütçe %{kat['ciro_butce']:.0f}, LFL %{kat['satis_lfl']:.1f}")
+        for kat in sorted(uyari_kategoriler, key=lambda x: x['ciro_achieved'])[:5]:
+            lfl_str = f", LFL %{kat['satis_lfl']:.1f}" if kat['satis_lfl'] != 0 else ""
+            sonuc.append(f"  • {kat['kategori']}: Achieved %{kat['ciro_achieved']:.0f}{lfl_str}")
     
     # İyi giden kategoriler
     if iyi_kategoriler:
         sonuc.append(f"\n✅ HEDEF ÜSTÜNDE ({len(iyi_kategoriler)} adet)")
         
-        en_iyiler = sorted(iyi_kategoriler, key=lambda x: x['ciro_butce'], reverse=True)[:3]
+        en_iyiler = sorted(iyi_kategoriler, key=lambda x: x['ciro_achieved'], reverse=True)[:5]
         for kat in en_iyiler:
-            fazla = kat['ciro_butce'] - 100
-            sonuc.append(f"  • {kat['kategori']}: Bütçe %{kat['ciro_butce']:.0f} (+%{fazla:.0f})")
+            sonuc.append(f"  • {kat['kategori']}: Achieved %{kat['ciro_achieved']:.0f} (+%{kat['ciro_achieved']:.0f} bütçe üstü)")
+    
+    # Maliyet uyarısı
+    if maliyet_sorunlu:
+        sonuc.append(f"\n⚠️ MALİYET UYARISI ({len(maliyet_sorunlu)} kategori)")
+        sonuc.append("Maliyet artışı satış artışından yüksek:\n")
+        for kat in maliyet_sorunlu[:3]:
+            sonuc.append(f"  • {kat['kategori']}: Maliyet %{kat['maliyet_lfl']:.1f} vs Satış %{kat['satis_lfl']:.1f}")
     
     # Stratejik öneriler
     sonuc.append("\n--- STRATEJİK ÖNERİLER ---")
     
     if kritik_kategoriler:
-        en_kotu = min(kritik_kategoriler, key=lambda x: x['ciro_butce'])
-        sonuc.append(f"\n1. ACİL: {en_kotu['kategori']} kategorisinde acil kampanya başlat")
-        sonuc.append(f"   Hedefin %{100 - en_kotu['ciro_butce']:.0f} altında")
+        en_kotu = min(kritik_kategoriler, key=lambda x: x['ciro_achieved'])
+        sonuc.append(f"\n1. ACİL: {en_kotu['kategori']} kategorisi en kritik")
+        sonuc.append(f"   Bütçenin %{abs(en_kotu['ciro_achieved']):.0f} altında - hemen aksiyon alınmalı")
     
     cover_artanlar = [k for k in kritik_kategoriler + uyari_kategoriler if k['cover_degisim'] > 5]
     if cover_artanlar:
-        sonuc.append(f"\n2. {len(cover_artanlar)} kategoride stok birikiyor (cover artıyor)")
-        sonuc.append("   Bu kategorilerde indirim/kampanya ile stok eritilmeli")
-    
-    if maliyet_sorunlu:
-        sonuc.append(f"\n3. {len(maliyet_sorunlu)} kategoride maliyet baskısı var")
-        sonuc.append("   Fiyat revizyonu veya tedarikçi görüşmesi gerekebilir")
+        sonuc.append(f"\n2. {len(cover_artanlar)} kategoride stok birikiyor")
+        sonuc.append("   İndirim/kampanya ile stok eritilmeli")
     
     return "\n".join(sonuc)
 
