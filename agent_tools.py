@@ -1219,6 +1219,127 @@ def bolge_karsilastir(kup: KupVeri) -> str:
     return "\n".join(sonuc)
 
 
+def sevkiyat_hesapla(kup: KupVeri, kategori_kod: int = None, marka_kod: str = None, forward_cover: float = 7.0) -> str:
+    """
+    R4U Allocator motorunu çalıştırarak sevkiyat hesaplaması yapar.
+    
+    Args:
+        kup: KupVeri instance
+        kategori_kod: Kategori filtresi (11=Renkli Kozmetik, vb.)
+        marka_kod: Marka filtresi
+        forward_cover: Hedef cover değeri
+    
+    Returns:
+        str: Sevkiyat özeti ve detayları
+    """
+    try:
+        from sevkiyat_motoru import SevkiyatMotoru
+    except ImportError:
+        return "❌ Sevkiyat motoru modülü bulunamadı (sevkiyat_motoru.py)"
+    
+    # KupVeri'yi SevkiyatMotoru'nun beklediği formata çevir
+    class KupAdapter:
+        def __init__(self, kup):
+            self.anlik_stok_satis = kup.stok_satis if hasattr(kup, 'stok_satis') else None
+            self.urun_master = kup.urun_master if hasattr(kup, 'urun_master') else None
+            self.magaza_master = kup.magaza_master if hasattr(kup, 'magaza_master') else None
+            self.depo_stok = kup.depo_stok if hasattr(kup, 'depo_stok') else None
+            self.kpi = kup.kpi if hasattr(kup, 'kpi') else None
+    
+    adapter = KupAdapter(kup)
+    
+    # Veri kontrolü
+    if adapter.anlik_stok_satis is None or len(adapter.anlik_stok_satis) == 0:
+        return "❌ Anlık stok/satış verisi yüklenmemiş."
+    
+    if adapter.depo_stok is None or len(adapter.depo_stok) == 0:
+        return "❌ Depo stok verisi yüklenmemiş."
+    
+    # Motor oluştur ve hesapla
+    motor = SevkiyatMotoru(adapter)
+    
+    sonuc = motor.hesapla(
+        kategori_kod=kategori_kod,
+        marka_kod=marka_kod,
+        forward_cover=forward_cover
+    )
+    
+    if sonuc['hata']:
+        return f"❌ Hesaplama hatası: {sonuc['hata']}"
+    
+    ozet = sonuc['ozet']
+    df = sonuc['sonuc']
+    
+    if df is None or len(df) == 0:
+        return "ℹ️ Sevkiyat ihtiyacı bulunamadı. Tüm mağazaların stoku yeterli görünüyor."
+    
+    # Rapor oluştur
+    rapor = []
+    
+    # Başlık
+    filtre_text = ""
+    if kategori_kod:
+        kat_adi = {11: "Renkli Kozmetik", 14: "Saç Bakım", 16: "Cilt Bakım", 19: "Parfüm", 20: "Kişisel Bakım"}.get(kategori_kod, str(kategori_kod))
+        filtre_text = f" ({kat_adi})"
+    if marka_kod:
+        filtre_text += f" - Marka: {marka_kod}"
+    
+    rapor.append(f"=== SEVKİYAT HESAPLAMA SONUCU{filtre_text} ===\n")
+    
+    # Özet metrikler
+    rapor.append("📊 ÖZET METRİKLER:")
+    rapor.append(f"   Toplam Sevkiyat: {ozet['toplam_sevkiyat']:,} adet")
+    rapor.append(f"   Toplam İhtiyaç: {ozet['toplam_ihtiyac']:,} adet")
+    rapor.append(f"   Karşılama Oranı: %{ozet['karsilama_orani']}")
+    rapor.append(f"   Karşılanamayan: {ozet['karsilanamayan_toplam']:,} adet")
+    rapor.append(f"   Ürün Sayısı: {ozet['urun_sayisi']}")
+    rapor.append(f"   Mağaza Sayısı: {ozet['magaza_sayisi']}")
+    rapor.append("")
+    
+    # Değerlendirme
+    if ozet['karsilama_orani'] >= 90:
+        rapor.append("✅ DURUM: İyi - Depo stoku ihtiyaçların çoğunu karşılıyor.")
+    elif ozet['karsilama_orani'] >= 70:
+        rapor.append("⚠️ DURUM: Orta - Bazı ürünlerde depo stok yetersizliği var.")
+    else:
+        rapor.append("🚨 DURUM: Kritik - Depo stok yetersizliği ciddi boyutta. Satınalma gerekli.")
+    rapor.append("")
+    
+    # En çok sevkiyat alan ürünler
+    rapor.append("🏆 EN ÇOK SEVKİYAT ALAN ÜRÜNLER (Top 10):")
+    top_urunler = df.groupby('urun_kod')['sevkiyat_miktari'].sum().nlargest(10)
+    for i, (urun, miktar) in enumerate(top_urunler.items(), 1):
+        rapor.append(f"   {i}. {urun}: {int(miktar):,} adet")
+    rapor.append("")
+    
+    # En çok sevkiyat alan mağazalar
+    rapor.append("🏪 EN ÇOK SEVKİYAT ALAN MAĞAZALAR (Top 10):")
+    top_magazalar = df.groupby('magaza_kod')['sevkiyat_miktari'].sum().nlargest(10)
+    for i, (magaza, miktar) in enumerate(top_magazalar.items(), 1):
+        rapor.append(f"   {i}. Mağaza {magaza}: {int(miktar):,} adet")
+    rapor.append("")
+    
+    # Depo bazında özet
+    if 'depo_kod' in df.columns:
+        rapor.append("🏭 DEPO BAZINDA DAĞILIM:")
+        depo_ozet = df.groupby('depo_kod')['sevkiyat_miktari'].sum().sort_values(ascending=False)
+        for depo, miktar in depo_ozet.items():
+            rapor.append(f"   Depo {depo}: {int(miktar):,} adet")
+        rapor.append("")
+    
+    # Karşılanamayan ihtiyaçlar
+    if ozet['karsilanamayan_toplam'] > 0:
+        rapor.append("⚠️ KARŞILANAMAYAN İHTİYAÇLAR (Satınalma Gerekli):")
+        karsilanamayan = df[df['karsilanamayan'] > 0].groupby('urun_kod')['karsilanamayan'].sum().nlargest(10)
+        for urun, miktar in karsilanamayan.items():
+            rapor.append(f"   ❌ {urun}: {int(miktar):,} adet eksik")
+        rapor.append("")
+    
+    rapor.append(f"📋 Toplam {len(df):,} mağaza×ürün kombinasyonu için sevkiyat hesaplandı.")
+    
+    return "\n".join(rapor)
+
+
 # =============================================================================
 # CLAUDE AGENT - TOOL CALLING
 # =============================================================================
@@ -1351,6 +1472,29 @@ TOOLS = [
             },
             "required": []
         }
+    },
+    {
+        "name": "sevkiyat_hesapla",
+        "description": "R4U Allocator motorunu çalıştırarak otomatik sevkiyat hesaplaması yapar. Segmentasyon, ihtiyaç hesaplama ve depo stok dağıtımını içerir. Kategori veya marka filtresi ile çalıştırılabilir. Sevkiyat planı oluşturmak için kullan.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "kategori_kod": {
+                    "type": "integer",
+                    "description": "Kategori filtresi. 11=Renkli Kozmetik, 14=Saç, 16=Cilt, 19=Parfüm, 20=Kişisel Bakım"
+                },
+                "marka_kod": {
+                    "type": "string",
+                    "description": "Marka filtresi (opsiyonel)"
+                },
+                "forward_cover": {
+                    "type": "number",
+                    "description": "Hedef cover değeri (gün). Varsayılan: 7",
+                    "default": 7.0
+                }
+            },
+            "required": []
+        }
     }
 ]
 
@@ -1386,6 +1530,13 @@ Sistemde kategori isimleri değil KODLARI kullanılıyor:
 2. **SC Tablosu**: Cover grupları analizi
 3. **Anlık Stok/Satış**: Mağaza × Ürün bazlı güncel durum
 4. **Depo Stok**: Sevkiyat kararları için
+5. **Sevkiyat Motoru (R4U)**: Otomatik sevkiyat hesaplama - sevkiyat_hesapla tool'u
+
+## SEVKİYAT HESAPLAMA
+Kullanıcı "sevkiyat yap", "sevk planı oluştur", "dağıtım hesapla" gibi bir şey istediğinde:
+→ sevkiyat_hesapla tool'unu kullan
+→ Kategori belirtildiyse kategori_kod parametresini ekle
+→ Sonuçları yorumla ve önerilerde bulun
 
 ## ÇALIŞMA ŞEKLİN
 1. ÖNCE en uygun 1-2 tool çağır
@@ -1492,6 +1643,13 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
                     tool_result = fazla_stok_analiz(kup, tool_input.get("limit", 30))
                 elif tool_name == "bolge_karsilastir":
                     tool_result = bolge_karsilastir(kup)
+                elif tool_name == "sevkiyat_hesapla":
+                    tool_result = sevkiyat_hesapla(
+                        kup,
+                        kategori_kod=tool_input.get("kategori_kod", None),
+                        marka_kod=tool_input.get("marka_kod", None),
+                        forward_cover=tool_input.get("forward_cover", 7.0)
+                    )
                 else:
                     tool_result = f"Bilinmeyen araç: {tool_name}"
                 
