@@ -16,20 +16,22 @@ import glob
 # =============================================================================
 
 class KupVeri:
-    """CSV tabanlı küp verisi yönetimi"""
+    """CSV ve Excel tabanlı küp verisi yönetimi"""
     
     def __init__(self, veri_klasoru: str):
         """
-        veri_klasoru: CSV dosyalarının bulunduğu klasör
+        veri_klasoru: CSV ve Excel dosyalarının bulunduğu klasör
         """
         self.veri_klasoru = veri_klasoru
         self._yukle()
         self._hazirla()
     
     def _yukle(self):
-        """Tüm CSV'leri yükle"""
+        """Tüm veri dosyalarını yükle"""
         
-        # Anlık stok satış (parçalı dosyaları birleştir)
+        # =====================================================================
+        # 1. ANLIK STOK SATIŞ (CSV - parçalı dosyalar)
+        # =====================================================================
         stok_satis_files = glob.glob(os.path.join(self.veri_klasoru, "anlik_stok_satis*.csv"))
         if stok_satis_files:
             dfs = []
@@ -46,16 +48,15 @@ class KupVeri:
         else:
             self.stok_satis = pd.DataFrame()
         
-        # Master tablolar - sep=None ile otomatik algılama
+        # =====================================================================
+        # 2. MASTER TABLOLAR (CSV)
+        # =====================================================================
         urun_path = os.path.join(self.veri_klasoru, "urun_master.csv")
         if os.path.exists(urun_path):
             try:
                 self.urun_master = pd.read_csv(urun_path, encoding='utf-8', sep=None, engine='python')
             except:
-                try:
-                    self.urun_master = pd.read_csv(urun_path, encoding='latin-1', sep=None, engine='python')
-                except:
-                    self.urun_master = pd.read_csv(urun_path, encoding='utf-8', sep=';')
+                self.urun_master = pd.read_csv(urun_path, encoding='latin-1', sep=None, engine='python')
         else:
             self.urun_master = pd.DataFrame()
         
@@ -64,10 +65,7 @@ class KupVeri:
             try:
                 self.magaza_master = pd.read_csv(magaza_path, encoding='utf-8', sep=None, engine='python')
             except:
-                try:
-                    self.magaza_master = pd.read_csv(magaza_path, encoding='latin-1', sep=None, engine='python')
-                except:
-                    self.magaza_master = pd.read_csv(magaza_path, encoding='utf-8', sep=';')
+                self.magaza_master = pd.read_csv(magaza_path, encoding='latin-1', sep=None, engine='python')
         else:
             self.magaza_master = pd.DataFrame()
         
@@ -76,10 +74,7 @@ class KupVeri:
             try:
                 self.depo_stok = pd.read_csv(depo_path, encoding='utf-8', sep=None, engine='python')
             except:
-                try:
-                    self.depo_stok = pd.read_csv(depo_path, encoding='latin-1', sep=None, engine='python')
-                except:
-                    self.depo_stok = pd.read_csv(depo_path, encoding='utf-8', sep=';')
+                self.depo_stok = pd.read_csv(depo_path, encoding='latin-1', sep=None, engine='python')
         else:
             self.depo_stok = pd.DataFrame()
         
@@ -88,19 +83,56 @@ class KupVeri:
             try:
                 self.kpi = pd.read_csv(kpi_path, encoding='utf-8', sep=None, engine='python')
             except:
-                try:
-                    self.kpi = pd.read_csv(kpi_path, encoding='latin-1', sep=None, engine='python')
-                except:
-                    self.kpi = pd.read_csv(kpi_path, encoding='utf-8', sep=';')
+                self.kpi = pd.read_csv(kpi_path, encoding='latin-1', sep=None, engine='python')
         else:
             self.kpi = pd.DataFrame()
         
+        # =====================================================================
+        # 3. TRADING RAPORU (Excel)
+        # =====================================================================
+        trading_path = os.path.join(self.veri_klasoru, "trading.xlsx")
+        if os.path.exists(trading_path):
+            try:
+                self.trading = pd.read_excel(trading_path, sheet_name='mtd')
+            except:
+                try:
+                    self.trading = pd.read_excel(trading_path, sheet_name=0)
+                except:
+                    self.trading = pd.DataFrame()
+        else:
+            self.trading = pd.DataFrame()
+        
+        # =====================================================================
+        # 4. SC TABLOSU (Excel - birden fazla sayfa)
+        # =====================================================================
+        sc_files = glob.glob(os.path.join(self.veri_klasoru, "*SC*.xlsx")) + \
+                   glob.glob(os.path.join(self.veri_klasoru, "*sc*.xlsx")) + \
+                   glob.glob(os.path.join(self.veri_klasoru, "*Tablosu*.xlsx"))
+        
+        self.sc_sayfalari = {}
+        if sc_files:
+            sc_path = sc_files[0]  # İlk bulunan SC dosyası
+            try:
+                xl = pd.ExcelFile(sc_path)
+                for sheet_name in xl.sheet_names:
+                    try:
+                        self.sc_sayfalari[sheet_name] = pd.read_excel(xl, sheet_name=sheet_name)
+                    except:
+                        pass
+            except Exception as e:
+                print(f"SC dosyası okunamadı: {e}")
+        
+        # =====================================================================
+        # LOG
+        # =====================================================================
         print(f"✅ Veri yüklendi:")
-        print(f"   - Stok/Satış: {len(self.stok_satis):,} satır | Kolonlar: {list(self.stok_satis.columns)}")
-        print(f"   - Ürün Master: {len(self.urun_master):,} ürün | Kolonlar: {list(self.urun_master.columns)}")
-        print(f"   - Mağaza Master: {len(self.magaza_master):,} mağaza | Kolonlar: {list(self.magaza_master.columns)}")
+        print(f"   - Stok/Satış: {len(self.stok_satis):,} satır")
+        print(f"   - Ürün Master: {len(self.urun_master):,} ürün")
+        print(f"   - Mağaza Master: {len(self.magaza_master):,} mağaza")
         print(f"   - Depo Stok: {len(self.depo_stok):,} satır")
-        print(f"   - KPI: {len(self.kpi):,} satır | Kolonlar: {list(self.kpi.columns)}")
+        print(f"   - KPI: {len(self.kpi):,} satır")
+        print(f"   - Trading: {len(self.trading):,} satır")
+        print(f"   - SC Sayfaları: {list(self.sc_sayfalari.keys())}")
     
     def _hazirla(self):
         """Veriyi zenginleştir ve hesaplamalar yap"""
@@ -237,6 +269,250 @@ class KupVeri:
 # =============================================================================
 # ARAÇ FONKSİYONLARI
 # =============================================================================
+
+def trading_analiz(kup: KupVeri) -> str:
+    """Trading raporu analizi - Bütçe gerçekleştirme ve LFL büyüme"""
+    
+    if len(kup.trading) == 0:
+        return "❌ Trading raporu yüklenmemiş."
+    
+    sonuc = []
+    sonuc.append("=== TRADING RAPORU ANALİZİ ===\n")
+    sonuc.append("Bütçe Gerçekleştirme ve LFL Performans\n")
+    
+    df = kup.trading.copy()
+    
+    # Kolon isimlerini kontrol et
+    kolonlar = list(df.columns)
+    sonuc.append(f"Mevcut kolonlar: {kolonlar[:10]}...\n")
+    
+    # Kategori kolonu bul
+    kategori_kol = None
+    for kol in ['Satır Etiketleri', 'Kategori', 'Category', 'kategori']:
+        if kol in df.columns:
+            kategori_kol = kol
+            break
+    
+    if kategori_kol is None:
+        kategori_kol = df.columns[0]
+    
+    # Bütçe sapması kolonu bul
+    butce_kol = None
+    for kol in df.columns:
+        if 'budget' in kol.lower() or 'bütçe' in kol.lower() or 'achieved' in kol.lower():
+            butce_kol = kol
+            break
+    
+    # LFL kolonu bul
+    lfl_kol = None
+    for kol in df.columns:
+        if 'lfl' in kol.lower():
+            lfl_kol = kol
+            break
+    
+    sonuc.append(f"{'Kategori':<25} | {'Bütçe %':>10} | {'LFL %':>10} | Durum")
+    sonuc.append("-" * 65)
+    
+    for _, row in df.iterrows():
+        kategori = str(row.get(kategori_kol, 'N/A'))[:25]
+        
+        if pd.isna(kategori) or kategori == 'nan' or kategori == 'N/A':
+            continue
+        
+        butce = row.get(butce_kol, 0) if butce_kol else 0
+        lfl = row.get(lfl_kol, 0) if lfl_kol else 0
+        
+        # Yüzde formatı kontrolü
+        if pd.notna(butce):
+            butce_val = float(butce) * 100 if abs(float(butce)) < 10 else float(butce)
+        else:
+            butce_val = 0
+            
+        if pd.notna(lfl):
+            lfl_val = float(lfl) * 100 if abs(float(lfl)) < 10 else float(lfl)
+        else:
+            lfl_val = 0
+        
+        # Durum belirleme
+        if butce_val < -30:
+            durum = "🔴 KRİTİK"
+        elif butce_val < -15:
+            durum = "🟡 DİKKAT"
+        elif butce_val < 0:
+            durum = "🟠 DÜŞÜK"
+        else:
+            durum = "✅ İYİ"
+        
+        sonuc.append(f"{kategori:<25} | {butce_val:>9.1f}% | {lfl_val:>9.1f}% | {durum}")
+    
+    # Özet
+    sonuc.append("\n--- ÖZET ---")
+    if butce_kol and butce_kol in df.columns:
+        kritik = len(df[df[butce_kol].fillna(0).astype(float) < -0.30])
+        sonuc.append(f"🔴 Kritik kategoriler (>%30 sapma): {kritik}")
+    
+    return "\n".join(sonuc)
+
+
+def cover_analiz(kup: KupVeri, sayfa: str = None) -> str:
+    """SC Tablosu cover grup analizi"""
+    
+    if len(kup.sc_sayfalari) == 0:
+        return "❌ SC Tablosu yüklenmemiş."
+    
+    sonuc = []
+    sonuc.append("=== COVER GRUP ANALİZİ ===\n")
+    
+    # Mevcut sayfaları göster
+    sonuc.append(f"Mevcut sayfalar: {list(kup.sc_sayfalari.keys())}\n")
+    
+    # Sayfa seç
+    if sayfa and sayfa in kup.sc_sayfalari:
+        df = kup.sc_sayfalari[sayfa]
+        sonuc.append(f"Seçili sayfa: {sayfa}\n")
+    else:
+        # İlk uygun sayfayı bul
+        for s in ['LW-TW Kategori Klasman Analiz', 'LW-TW Cover Analiz', 'Cover']:
+            if s in kup.sc_sayfalari:
+                df = kup.sc_sayfalari[s]
+                sonuc.append(f"Seçili sayfa: {s}\n")
+                break
+        else:
+            # İlk sayfayı al
+            first_key = list(kup.sc_sayfalari.keys())[0]
+            df = kup.sc_sayfalari[first_key]
+            sonuc.append(f"Seçili sayfa: {first_key}\n")
+    
+    sonuc.append(f"Kolonlar: {list(df.columns)[:15]}...")
+    sonuc.append(f"Satır sayısı: {len(df)}\n")
+    
+    # İlk 20 satırı göster
+    sonuc.append("--- İlk 20 Satır ---")
+    for i, row in df.head(20).iterrows():
+        row_str = " | ".join([f"{str(v)[:15]}" for v in row.values[:8]])
+        sonuc.append(row_str)
+    
+    # Cover grup analizi yap (eğer cover kolonu varsa)
+    cover_kol = None
+    for kol in df.columns:
+        if 'cover' in str(kol).lower():
+            cover_kol = kol
+            break
+    
+    if cover_kol:
+        sonuc.append(f"\n--- Cover Dağılımı ({cover_kol}) ---")
+        try:
+            cover_dist = df[cover_kol].value_counts().head(10)
+            for val, count in cover_dist.items():
+                sonuc.append(f"  {val}: {count} satır")
+        except:
+            pass
+    
+    return "\n".join(sonuc)
+
+
+def ihtiyac_hesapla(kup: KupVeri, limit: int = 50) -> str:
+    """Mağaza ihtiyacı vs Depo stok karşılaştırması"""
+    
+    sonuc = []
+    sonuc.append("=== İHTİYAÇ ANALİZİ ===\n")
+    sonuc.append("Mağaza ihtiyacı vs Depo stok karşılaştırması\n")
+    
+    if len(kup.stok_satis) == 0:
+        return "❌ Stok/Satış verisi yüklenmemiş."
+    
+    if len(kup.depo_stok) == 0:
+        return "❌ Depo stok verisi yüklenmemiş."
+    
+    df = kup.stok_satis.copy()
+    
+    # Mağaza bazında ihtiyaç hesapla
+    if 'stok_durum' not in df.columns:
+        return "❌ Stok durumu hesaplanamamış."
+    
+    # Sevk gereken satırları al
+    sevk_gerekli = df[df['stok_durum'] == 'SEVK_GEREKLI'].copy()
+    
+    if len(sevk_gerekli) == 0:
+        return "✅ Sevk gereken ürün bulunmuyor."
+    
+    # Ürün bazında ihtiyaç topla
+    if 'urun_kod' not in sevk_gerekli.columns:
+        return "❌ urun_kod kolonu bulunamadı."
+    
+    ihtiyac = sevk_gerekli.groupby('urun_kod').agg({
+        'stok': 'sum',
+        'min_deger': 'first'
+    }).reset_index()
+    ihtiyac.columns = ['urun_kod', 'mevcut_stok', 'min_deger']
+    
+    # Mağaza sayısını hesapla
+    magaza_sayisi = sevk_gerekli.groupby('urun_kod').size().reset_index(name='magaza_sayisi')
+    ihtiyac = ihtiyac.merge(magaza_sayisi, on='urun_kod')
+    
+    # İhtiyaç hesapla
+    ihtiyac['ihtiyac'] = ihtiyac['magaza_sayisi'] * ihtiyac['min_deger'].fillna(3) - ihtiyac['mevcut_stok']
+    ihtiyac['ihtiyac'] = ihtiyac['ihtiyac'].clip(lower=0)
+    
+    # Depo stok ile birleştir
+    depo = kup.depo_stok.copy()
+    depo.columns = depo.columns.str.lower().str.strip()
+    
+    if 'urun_kod' in depo.columns:
+        depo['urun_kod'] = depo['urun_kod'].astype(str)
+        ihtiyac['urun_kod'] = ihtiyac['urun_kod'].astype(str)
+        
+        depo_grouped = depo.groupby('urun_kod')['stok'].sum().reset_index()
+        depo_grouped.columns = ['urun_kod', 'depo_stok']
+        
+        ihtiyac = ihtiyac.merge(depo_grouped, on='urun_kod', how='left')
+        ihtiyac['depo_stok'] = ihtiyac['depo_stok'].fillna(0)
+    else:
+        ihtiyac['depo_stok'] = 0
+    
+    # Karşılama durumu
+    ihtiyac['karsilama'] = np.where(
+        ihtiyac['depo_stok'] >= ihtiyac['ihtiyac'],
+        'TAM',
+        np.where(ihtiyac['depo_stok'] > 0, 'KISMİ', 'YOK')
+    )
+    
+    # Önceliklendir
+    ihtiyac = ihtiyac.sort_values('ihtiyac', ascending=False).head(limit)
+    
+    sonuc.append(f"{'Ürün Kodu':<12} | {'Mağaza#':>8} | {'İhtiyaç':>10} | {'Depo':>10} | Durum")
+    sonuc.append("-" * 65)
+    
+    for _, row in ihtiyac.iterrows():
+        if row['karsilama'] == 'TAM':
+            durum = "✅ Tam karşılanır"
+        elif row['karsilama'] == 'KISMİ':
+            durum = "🟡 Kısmi"
+        else:
+            durum = "🔴 Depoda yok"
+        
+        sonuc.append(f"{row['urun_kod']:<12} | {row['magaza_sayisi']:>8} | {row['ihtiyac']:>10,.0f} | {row['depo_stok']:>10,.0f} | {durum}")
+    
+    # Özet
+    sonuc.append("\n--- ÖZET ---")
+    tam = len(ihtiyac[ihtiyac['karsilama'] == 'TAM'])
+    kismi = len(ihtiyac[ihtiyac['karsilama'] == 'KISMİ'])
+    yok = len(ihtiyac[ihtiyac['karsilama'] == 'YOK'])
+    
+    sonuc.append(f"✅ Tam karşılanabilir: {tam} ürün")
+    sonuc.append(f"🟡 Kısmi karşılanabilir: {kismi} ürün")
+    sonuc.append(f"🔴 Depoda yok: {yok} ürün")
+    
+    toplam_ihtiyac = ihtiyac['ihtiyac'].sum()
+    toplam_depo = ihtiyac['depo_stok'].sum()
+    karsilama_orani = (toplam_depo / toplam_ihtiyac * 100) if toplam_ihtiyac > 0 else 0
+    
+    sonuc.append(f"\nToplam ihtiyaç: {toplam_ihtiyac:,.0f} adet")
+    sonuc.append(f"Toplam depo stok: {toplam_depo:,.0f} adet")
+    sonuc.append(f"Karşılama oranı: %{karsilama_orani:.1f}")
+    
+    return "\n".join(sonuc)
+
 
 def genel_ozet(kup: KupVeri) -> str:
     """Genel özet - kategoriler ve bölgeler bazında durum"""
@@ -806,35 +1082,76 @@ TOOLS = [
             "properties": {},
             "required": []
         }
+    },
+    {
+        "name": "trading_analiz",
+        "description": "Trading raporunu analiz eder. Bütçe gerçekleştirme oranları, LFL (Like-for-Like) büyüme, kategori bazlı performans. Ana karar aracı - önce bunu çağır.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
+        "name": "cover_analiz",
+        "description": "SC Tablosundan cover grup analizini yapar. Kategori × Cover Grup matrisi, stok dağılımı, marj analizi. Hangi cover grubunda sorun var gösterir.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sayfa": {
+                    "type": "string",
+                    "description": "Analiz edilecek SC sayfa adı. Boş bırakılırsa otomatik seçilir."
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "ihtiyac_hesapla",
+        "description": "Mağaza ihtiyacı vs Depo stok karşılaştırması yapar. Hangi ürünlerin sevk edilebilir, hangilerinin depoda yok olduğunu gösterir.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Listelenecek maksimum ürün sayısı. Varsayılan: 50",
+                    "default": 50
+                }
+            },
+            "required": []
+        }
     }
 ]
 
 SYSTEM_PROMPT = """Sen EVE Kozmetik için çalışan deneyimli bir Retail Planner'sın. Adın "Sanal Planner".
 
-Görevin mağaza ve ürün verilerini analiz edip şu kararları vermek:
-1. Sevkiyat stratejisi - KPI hedeflerine göre hangi ürünler hangi mağazalara gönderilmeli
-2. İndirim/kampanya kararları - fazla stoklu ve yavaş dönen ürünler için öneriler
-3. Bölge ve kategori bazlı performans analizi
-4. Mağaza ve ürün bazlı detaylı inceleme
+## VERİ KAYNAKLARI
+1. **Trading Raporu**: Bütçe gerçekleştirme, LFL büyüme, kategori performansı - ANA KARAR KAYNAĞI
+2. **SC Tablosu**: Cover grupları (0-5, 5-9, 9-12, 12-15, 15-20, 20-25, 25-30, 30+), stok dağılımı, marj analizi
+3. **Anlık Stok/Satış**: Mağaza × Ürün bazlı güncel durum
+4. **Depo Stok**: Merkez depodaki stoklar - sevkiyat kararları için
+5. **KPI**: Min/Max stok hedefleri, forward cover
 
-Kullandığın KPI kriterleri:
-- min_deger: Mağazada minimum olması gereken stok
-- max_deger: Mağazada maksimum olması gereken stok  
-- forward_cover: Hedef stok/satış oranı (hafta)
+## GÖREVLERİN
+1. **Bütçe Analizi**: Trading raporundan sapmaları tespit et, kritik kategorileri bul
+2. **Cover Analizi**: SC tablosundan cover gruplarını değerlendir, 30+ cover çok yüksek = indirim gerek
+3. **Sevkiyat Stratejisi**: Mağaza ihtiyaçlarını hesapla, depo stoğuyla karşılaştır
+4. **İndirim/Kampanya**: Yüksek cover'lı (>20 hafta) ürünleri tespit et
 
-Stok durumu tanımları:
-- SEVK_GEREKLI (🔴): Stok < min_deger → Acil sevkiyat gerekli
-- FAZLA_STOK (🟡): Stok > max_deger → İndirim/kampanya düşünülmeli
-- YAVAS (🟠): Cover > hedefin 3 katı → Yavaş dönen ürün
-- NORMAL (✅): Hedef aralığında
+## ÇALIŞMA ŞEKLİN
+1. **Önce trading_analiz** çağır → Bütçe ve LFL durumunu anla
+2. **Sonra cover_analiz** çağır → Cover dağılımını gör
+3. **Detay için**: kategori_analiz, magaza_analiz, urun_analiz
+4. **Aksiyon için**: sevkiyat_plani, fazla_stok_analiz, ihtiyac_hesapla
 
-Çalışma şeklin:
-1. Önce genel_ozet ile büyük resme bak
-2. Sorunlu alanları tespit et (kategori, bölge, mağaza)
-3. Detay araçlarıyla derine in
-4. sevkiyat_plani veya fazla_stok_analiz ile aksiyon listesi çıkar
+## KRİTİK KURALLAR
+- Bütçe sapması > %30 → KRİTİK
+- Cover 30+ hafta → Agresif indirim gerek
+- Cover 20-30 hafta → Kampanya düşün
+- Cover < 4 hafta → Stok riski, sevk et
+- Top kategoriler: Renkli Kozmetik, Saç Bakım, Cilt Bakım
 
-Türkçe yanıt ver. Bulgularını net ve aksiyona dönük şekilde sun."""
+Türkçe yanıt ver. Bulgularını net ve aksiyona dönük şekilde sun. Her zaman NEDEN ve NE YAPMALI önerisi ver."""
 
 
 def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
@@ -885,6 +1202,12 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
             try:
                 if tool_name == "genel_ozet":
                     tool_result = genel_ozet(kup)
+                elif tool_name == "trading_analiz":
+                    tool_result = trading_analiz(kup)
+                elif tool_name == "cover_analiz":
+                    tool_result = cover_analiz(kup, tool_input.get("sayfa", None))
+                elif tool_name == "ihtiyac_hesapla":
+                    tool_result = ihtiyac_hesapla(kup, tool_input.get("limit", 50))
                 elif tool_name == "kategori_analiz":
                     tool_result = kategori_analiz(kup, tool_input.get("kategori_kod", ""))
                 elif tool_name == "magaza_analiz":
