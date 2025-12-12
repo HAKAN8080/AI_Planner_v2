@@ -319,14 +319,10 @@ def trading_analiz(kup: KupVeri) -> str:
         return "❌ Trading raporu yüklenmemiş."
     
     sonuc = []
-    sonuc.append("=== TRADING RAPORU ANALİZİ ===\n")
-    sonuc.append("Bütçe Gerçekleştirme ve LFL Performans\n")
-    
     df = kup.trading.copy()
     
-    # Kolon isimlerini kontrol et
+    # Kolon isimlerini kontrol et ve debug
     kolonlar = list(df.columns)
-    sonuc.append(f"Mevcut kolonlar: {kolonlar[:10]}...\n")
     
     # Kategori kolonu bul
     kategori_kol = None
@@ -334,64 +330,143 @@ def trading_analiz(kup: KupVeri) -> str:
         if kol in df.columns:
             kategori_kol = kol
             break
-    
     if kategori_kol is None:
         kategori_kol = df.columns[0]
     
     # Bütçe sapması kolonu bul
     butce_kol = None
     for kol in df.columns:
-        if 'budget' in kol.lower() or 'bütçe' in kol.lower() or 'achieved' in kol.lower():
+        kol_lower = str(kol).lower()
+        if 'budget' in kol_lower or 'bütçe' in kol_lower or 'achieved' in kol_lower:
             butce_kol = kol
             break
     
     # LFL kolonu bul
     lfl_kol = None
     for kol in df.columns:
-        if 'lfl' in kol.lower():
+        if 'lfl' in str(kol).lower():
             lfl_kol = kol
             break
     
-    sonuc.append(f"{'Kategori':<25} | {'Bütçe %':>10} | {'LFL %':>10} | Durum")
-    sonuc.append("-" * 65)
+    # Ciro kolonu bul
+    ciro_kol = None
+    for kol in df.columns:
+        kol_lower = str(kol).lower()
+        if 'ciro' in kol_lower or 'sales' in kol_lower or 'revenue' in kol_lower:
+            ciro_kol = kol
+            break
+    
+    # Analiz için veri topla
+    kritik_kategoriler = []
+    uyari_kategoriler = []
+    iyi_kategoriler = []
     
     for _, row in df.iterrows():
-        kategori = str(row.get(kategori_kol, 'N/A'))[:25]
+        kategori = str(row.get(kategori_kol, 'N/A'))[:30]
         
-        if pd.isna(kategori) or kategori == 'nan' or kategori == 'N/A':
+        if pd.isna(kategori) or kategori == 'nan' or kategori == 'N/A' or 'total' in kategori.lower():
             continue
         
         butce = row.get(butce_kol, 0) if butce_kol else 0
         lfl = row.get(lfl_kol, 0) if lfl_kol else 0
+        ciro = row.get(ciro_kol, 0) if ciro_kol else 0
         
-        # Yüzde formatı kontrolü
+        # Yüzde formatı düzeltme - değer zaten yüzde ise (örn: -15.5) olduğu gibi kullan
+        # değer ondalık ise (örn: -0.155) 100 ile çarp
         if pd.notna(butce):
-            butce_val = float(butce) * 100 if abs(float(butce)) < 10 else float(butce)
+            butce_val = float(butce)
+            # Eğer değer -1 ile 1 arasındaysa, yüzdeye çevir
+            if -1 < butce_val < 1:
+                butce_val = butce_val * 100
         else:
             butce_val = 0
             
         if pd.notna(lfl):
-            lfl_val = float(lfl) * 100 if abs(float(lfl)) < 10 else float(lfl)
+            lfl_val = float(lfl)
+            if -1 < lfl_val < 1:
+                lfl_val = lfl_val * 100
         else:
             lfl_val = 0
         
-        # Durum belirleme
-        if butce_val < -30:
-            durum = "🔴 KRİTİK"
-        elif butce_val < -15:
-            durum = "🟡 DİKKAT"
-        elif butce_val < 0:
-            durum = "🟠 DÜŞÜK"
+        if pd.notna(ciro):
+            ciro_val = float(ciro)
         else:
-            durum = "✅ İYİ"
+            ciro_val = 0
         
-        sonuc.append(f"{kategori:<25} | {butce_val:>9.1f}% | {lfl_val:>9.1f}% | {durum}")
+        # Kategorize et
+        if butce_val < -30:
+            kritik_kategoriler.append({
+                'kategori': kategori, 'butce': butce_val, 'lfl': lfl_val, 'ciro': ciro_val
+            })
+        elif butce_val < -15:
+            uyari_kategoriler.append({
+                'kategori': kategori, 'butce': butce_val, 'lfl': lfl_val, 'ciro': ciro_val
+            })
+        elif butce_val >= 0:
+            iyi_kategoriler.append({
+                'kategori': kategori, 'butce': butce_val, 'lfl': lfl_val, 'ciro': ciro_val
+            })
     
-    # Özet
-    sonuc.append("\n--- ÖZET ---")
-    if butce_kol and butce_kol in df.columns:
-        kritik = len(df[df[butce_kol].fillna(0).astype(float) < -0.30])
-        sonuc.append(f"🔴 Kritik kategoriler (>%30 sapma): {kritik}")
+    # ANLATIMLI RAPOR
+    sonuc.append("=== TRADING PERFORMANS ANALİZİ ===\n")
+    
+    # Genel değerlendirme
+    toplam_kat = len(kritik_kategoriler) + len(uyari_kategoriler) + len(iyi_kategoriler)
+    
+    if len(kritik_kategoriler) > toplam_kat * 0.3:
+        sonuc.append("🚨 GENEL DURUM: Ciddi performans sorunları var. Acil aksiyon gerekiyor.\n")
+    elif len(kritik_kategoriler) > 0:
+        sonuc.append("⚠️ GENEL DURUM: Bazı kategorilerde sorun var, dikkat edilmeli.\n")
+    else:
+        sonuc.append("✅ GENEL DURUM: Performans genel olarak hedef dahilinde.\n")
+    
+    # Kritik kategoriler - detaylı anlatım
+    if kritik_kategoriler:
+        sonuc.append(f"🔴 KRİTİK KATEGORİLER ({len(kritik_kategoriler)} adet)")
+        sonuc.append("Bu kategoriler bütçenin %30'dan fazla altında:\n")
+        
+        for kat in sorted(kritik_kategoriler, key=lambda x: x['butce'])[:5]:
+            sonuc.append(f"  • {kat['kategori']}")
+            sonuc.append(f"    Bütçe gerçekleşme: %{kat['butce']:.1f} (hedefin çok altında)")
+            if kat['lfl'] < -10:
+                sonuc.append(f"    LFL büyüme: %{kat['lfl']:.1f} (geçen yıla göre düşüş)")
+            elif kat['lfl'] > 5:
+                sonuc.append(f"    LFL büyüme: %{kat['lfl']:.1f} (geçen yıla göre artış)")
+            sonuc.append(f"    → ÖNERİ: Satış artırıcı kampanya veya stok optimizasyonu gerekli")
+            sonuc.append("")
+    
+    # Uyarı kategorileri
+    if uyari_kategoriler:
+        sonuc.append(f"\n🟡 DİKKAT GEREKTİREN KATEGORİLER ({len(uyari_kategoriler)} adet)")
+        sonuc.append("Bütçenin %15-30 altında:\n")
+        
+        for kat in sorted(uyari_kategoriler, key=lambda x: x['butce'])[:5]:
+            sonuc.append(f"  • {kat['kategori']}: Bütçe %{kat['butce']:.1f}, LFL %{kat['lfl']:.1f}")
+        sonuc.append("")
+    
+    # İyi giden kategoriler
+    if iyi_kategoriler:
+        sonuc.append(f"\n✅ HEDEF ÜZERİNDE KATEGORİLER ({len(iyi_kategoriler)} adet)")
+        
+        en_iyiler = sorted(iyi_kategoriler, key=lambda x: x['butce'], reverse=True)[:3]
+        for kat in en_iyiler:
+            sonuc.append(f"  • {kat['kategori']}: Bütçe +%{kat['butce']:.1f}")
+    
+    # Stratejik öneriler
+    sonuc.append("\n--- STRATEJİK ÖNERİLER ---")
+    
+    if kritik_kategoriler:
+        sonuc.append(f"\n1. ACİL: {len(kritik_kategoriler)} kritik kategoride satış artırıcı kampanya başlat")
+        
+        # En kötü performans
+        en_kotu = min(kritik_kategoriler, key=lambda x: x['butce'])
+        sonuc.append(f"   Öncelik: {en_kotu['kategori']} (Bütçe %{en_kotu['butce']:.1f})")
+    
+    # LFL negatif olanlar
+    lfl_negatif = [k for k in kritik_kategoriler + uyari_kategoriler if k['lfl'] < -10]
+    if lfl_negatif:
+        sonuc.append(f"\n2. {len(lfl_negatif)} kategoride geçen yıla göre ciddi düşüş var")
+        sonuc.append("   Bu kategorilerde müşteri kaybı veya trend değişimi olabilir")
     
     return "\n".join(sonuc)
 
@@ -563,65 +638,87 @@ def genel_ozet(kup: KupVeri) -> str:
         return "Veri yüklenmemiş."
     
     sonuc = []
-    sonuc.append("=== GENEL ÖZET ===\n")
     
-    # Toplam metrikler - güvenli erişim
+    # Toplam metrikler
     toplam_stok = kup.stok_satis['stok'].sum() if 'stok' in kup.stok_satis.columns else 0
     toplam_satis = kup.stok_satis['satis'].sum() if 'satis' in kup.stok_satis.columns else 0
     toplam_ciro = kup.stok_satis['ciro'].sum() if 'ciro' in kup.stok_satis.columns else 0
     toplam_kar = kup.stok_satis['kar'].sum() if 'kar' in kup.stok_satis.columns else 0
     
-    sonuc.append(f"📦 Toplam Mağaza Stok: {toplam_stok:,.0f} adet")
-    sonuc.append(f"🛒 Toplam Satış: {toplam_satis:,.0f} adet")
-    sonuc.append(f"💰 Toplam Ciro: {toplam_ciro:,.0f} TL")
-    sonuc.append(f"📈 Toplam Kar: {toplam_kar:,.0f} TL")
-    
     # Depo stok
-    if len(kup.depo_stok) > 0:
-        depo_toplam = kup.depo_stok['stok'].sum()
-        sonuc.append(f"🏭 Toplam Depo Stok: {depo_toplam:,.0f} adet")
+    depo_toplam = kup.depo_stok['stok'].sum() if len(kup.depo_stok) > 0 else 0
     
-    # Stok durumu dağılımı
-    sonuc.append("\n--- Stok Durumu Dağılımı ---")
-    durum_ozet = kup.stok_satis.groupby('stok_durum').agg({
-        'urun_kod': 'count',
-        'stok': 'sum'
-    }).reset_index()
-    durum_ozet.columns = ['Durum', 'Satir_Sayisi', 'Stok']
+    # Stok durumu sayıları
+    sevk_gerekli = len(kup.stok_satis[kup.stok_satis['stok_durum'] == 'SEVK_GEREKLI'])
+    fazla_stok = len(kup.stok_satis[kup.stok_satis['stok_durum'] == 'FAZLA_STOK'])
+    yavas = len(kup.stok_satis[kup.stok_satis['stok_durum'] == 'YAVAS'])
+    normal = len(kup.stok_satis[kup.stok_satis['stok_durum'] == 'NORMAL'])
+    toplam_kayit = len(kup.stok_satis)
     
-    for _, row in durum_ozet.iterrows():
-        emoji = {'SEVK_GEREKLI': '🔴', 'FAZLA_STOK': '🟡', 'YAVAS': '🟠', 'NORMAL': '✅'}.get(row['Durum'], '⚪')
-        sonuc.append(f"{emoji} {row['Durum']}: {row['Satir_Sayisi']:,} satır, {row['Stok']:,.0f} adet stok")
+    # Cover hesapla
+    if toplam_satis > 0:
+        genel_cover = (toplam_stok + depo_toplam) / toplam_satis
+    else:
+        genel_cover = 999
     
-    # Kategori bazlı özet
-    if 'kategori_kod' in kup.stok_satis.columns:
-        sonuc.append("\n--- Kategori Bazlı Özet ---")
-        kat_ozet = kup.stok_satis.groupby('kategori_kod').agg({
-            'stok': 'sum',
-            'satis': 'sum',
-            'ciro': 'sum',
-            'kar': 'sum'
-        }).reset_index()
-        kat_ozet['kar_marji'] = kat_ozet['kar'] / (kat_ozet['ciro'] + 0.01) * 100
-        kat_ozet = kat_ozet.nlargest(10, 'ciro')
-        
-        for _, row in kat_ozet.iterrows():
-            durum = "✅" if row['kar_marji'] > 0 else "🔴"
-            sonuc.append(f"{durum} Kat {row['kategori_kod']}: Stok {row['stok']:,.0f} | Satış {row['satis']:,.0f} | Kar %{row['kar_marji']:.1f}")
+    # ANLATIMLI RAPOR
+    sonuc.append("=== EVE KOZMETİK GENEL DURUM ANALİZİ ===\n")
     
-    # Bölge bazlı özet
-    if 'bolge' in kup.stok_satis.columns:
-        sonuc.append("\n--- Bölge Bazlı Özet ---")
-        bolge_ozet = kup.stok_satis.groupby('bolge').agg({
-            'stok': 'sum',
-            'satis': 'sum',
-            'ciro': 'sum'
-        }).reset_index()
-        bolge_ozet = bolge_ozet.nlargest(10, 'ciro')
-        
-        for _, row in bolge_ozet.iterrows():
-            if pd.notna(row['bolge']):
-                sonuc.append(f"  {row['bolge']}: Stok {row['stok']:,.0f} | Satış {row['satis']:,.0f} | Ciro {row['ciro']:,.0f}")
+    # Genel değerlendirme
+    sevk_oran = sevk_gerekli / toplam_kayit * 100 if toplam_kayit > 0 else 0
+    fazla_oran = (fazla_stok + yavas) / toplam_kayit * 100 if toplam_kayit > 0 else 0
+    
+    if sevk_oran > 50:
+        sonuc.append("🚨 DURUM KRİTİK: Mağazaların yarısından fazlasında stok eksikliği var!")
+        sonuc.append(f"   {sevk_gerekli:,} mağaza×ürün kombinasyonunda acil sevkiyat gerekiyor.\n")
+    elif sevk_oran > 30:
+        sonuc.append("⚠️ DURUM ENDİŞE VERİCİ: Önemli sayıda mağazada stok sıkıntısı var.")
+        sonuc.append(f"   {sevk_gerekli:,} noktada sevkiyat bekliyor.\n")
+    else:
+        sonuc.append("✅ GENEL DURUM: Stok seviyeleri kontrol altında.\n")
+    
+    # Temel metrikler - anlatımlı
+    sonuc.append("📊 TEMEL GÖSTERGELER")
+    sonuc.append(f"  • Mağazalarda toplam {toplam_stok:,.0f} adet ürün bulunuyor")
+    sonuc.append(f"  • Depoda {depo_toplam:,.0f} adet sevke hazır stok var")
+    sonuc.append(f"  • Haftalık satış hızı: {toplam_satis:,.0f} adet")
+    sonuc.append(f"  • Genel cover: {genel_cover:.1f} hafta (depo dahil)")
+    
+    if toplam_ciro > 0:
+        kar_marji = toplam_kar / toplam_ciro * 100
+        sonuc.append(f"  • Kar marjı: %{kar_marji:.1f}")
+    
+    # Stok durumu - anlatımlı
+    sonuc.append("\n📦 STOK DURUMU ANALİZİ")
+    
+    if sevk_gerekli > 0:
+        sonuc.append(f"  🔴 SEVKİYAT GEREKLİ: {sevk_gerekli:,} nokta (%{sevk_oran:.1f})")
+        sonuc.append(f"     Bu mağazalarda stok minimum seviyenin altına düşmüş.")
+    
+    if fazla_stok > 0:
+        sonuc.append(f"  🟡 FAZLA STOK: {fazla_stok:,} nokta")
+        sonuc.append(f"     Bu ürünlerde stok eritme kampanyası düşünülebilir.")
+    
+    if yavas > 0:
+        sonuc.append(f"  🟠 YAVAŞ DÖNEN: {yavas:,} nokta")
+        sonuc.append(f"     Satış hızı düşük, indirim veya promosyon gerekebilir.")
+    
+    if normal > 0:
+        sonuc.append(f"  ✅ NORMAL: {normal:,} nokta")
+    
+    # Öncelikli aksiyonlar
+    sonuc.append("\n🎯 ÖNCELİKLİ AKSİYONLAR")
+    
+    aksiyon_no = 1
+    if sevk_oran > 30:
+        sonuc.append(f"  {aksiyon_no}. Acil sevkiyat planı oluştur (sevkiyat_plani aracını kullan)")
+        aksiyon_no += 1
+    
+    if fazla_oran > 20:
+        sonuc.append(f"  {aksiyon_no}. Fazla stoklar için kampanya planla (fazla_stok_analiz aracını kullan)")
+        aksiyon_no += 1
+    
+    sonuc.append(f"  {aksiyon_no}. Detaylı kategori analizi için kategori_analiz aracını kullan")
     
     return "\n".join(sonuc)
 
@@ -1167,33 +1264,38 @@ TOOLS = [
 
 SYSTEM_PROMPT = """Sen EVE Kozmetik için çalışan deneyimli bir Retail Planner'sın. Adın "Sanal Planner".
 
-## VERİ KAYNAKLARI
-1. **Trading Raporu**: Bütçe gerçekleştirme, LFL büyüme, kategori performansı - ANA KARAR KAYNAĞI
-2. **SC Tablosu**: Cover grupları (0-5, 5-9, 9-12, 12-15, 15-20, 20-25, 25-30, 30+), stok dağılımı, marj analizi
-3. **Anlık Stok/Satış**: Mağaza × Ürün bazlı güncel durum
-4. **Depo Stok**: Merkez depodaki stoklar - sevkiyat kararları için
-5. **KPI**: Min/Max stok hedefleri, forward cover
+## YANITLAMA TARZI
+- Kullanıcıya ANLATIMLI ve YORUMLU cevaplar ver
+- Sadece rakam listesi dökmek yerine, ne anlama geldiğini açıkla
+- "Bu ne demek?", "Neden önemli?", "Ne yapmalıyız?" sorularını cevapla
+- İş dilinde, profesyonel ama anlaşılır konuş
+- Kritik bulguları vurgula, önemsiz detayları atla
 
-## GÖREVLERİN
-1. **Bütçe Analizi**: Trading raporundan sapmaları tespit et, kritik kategorileri bul
-2. **Cover Analizi**: SC tablosundan cover gruplarını değerlendir, 30+ cover çok yüksek = indirim gerek
-3. **Sevkiyat Stratejisi**: Mağaza ihtiyaçlarını hesapla, depo stoğuyla karşılaştır
-4. **İndirim/Kampanya**: Yüksek cover'lı (>20 hafta) ürünleri tespit et
+## ÖRNEK İYİ CEVAP:
+"Renkli Kozmetik kategorisinde ciddi bir performans sorunu görüyorum. Bütçenin %35 altındayız ve geçen yıla göre de %12 düşüş var. Bu muhtemelen sezon sonu ürünlerinin satılamamasından kaynaklanıyor. Öncelikle bu kategorideki yüksek stoklu ürünlere kampanya açmamızı öneriyorum."
+
+## ÖRNEK KÖTÜ CEVAP:
+"Kategori 14: Bütçe -35%, LFL -12%, Cover 18 hafta, Stok 45000..."
+
+## VERİ KAYNAKLARI
+1. **Trading Raporu**: Bütçe gerçekleştirme, LFL büyüme - ANA KARAR KAYNAĞI
+2. **SC Tablosu**: Cover grupları analizi
+3. **Anlık Stok/Satış**: Mağaza × Ürün bazlı güncel durum
+4. **Depo Stok**: Sevkiyat kararları için
 
 ## ÇALIŞMA ŞEKLİN
-1. **Önce trading_analiz** çağır → Bütçe ve LFL durumunu anla
-2. **Sonra cover_analiz** çağır → Cover dağılımını gör
-3. **Detay için**: kategori_analiz, magaza_analiz, urun_analiz
-4. **Aksiyon için**: sevkiyat_plani, fazla_stok_analiz, ihtiyac_hesapla
+1. Önce genel durumu anla (genel_ozet veya trading_analiz)
+2. Sorunlu alanları tespit et
+3. Detaya in (kategori, mağaza, ürün analizi)
+4. Somut aksiyon önerileri sun
 
 ## KRİTİK KURALLAR
-- Bütçe sapması > %30 → KRİTİK
-- Cover 30+ hafta → Agresif indirim gerek
-- Cover 20-30 hafta → Kampanya düşün
-- Cover < 4 hafta → Stok riski, sevk et
-- Top kategoriler: Renkli Kozmetik, Saç Bakım, Cilt Bakım
+- Bütçe sapması > %30 → KRİTİK, hemen aksiyon
+- Cover 30+ hafta → Agresif indirim şart
+- Cover 20-30 hafta → Kampanya planla
+- Cover < 4 hafta → Stok riski, acil sevk
 
-Türkçe yanıt ver. Bulgularını net ve aksiyona dönük şekilde sun. Her zaman NEDEN ve NE YAPMALI önerisi ver."""
+Türkçe yanıt ver. Her zaman NEDEN ve NE YAPMALI önerisi ekle."""
 
 
 def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
