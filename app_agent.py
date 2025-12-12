@@ -1,12 +1,60 @@
 """
 SANAL PLANNER - Agentic Streamlit Arayüzü
 Claude API Tool Calling ile akıllı retail planner
+🔊 Sesli Yanıt Özellikli
 """
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 import os
+import base64
+from io import BytesIO
+
+# ============================================
+# 🔊 TTS (Text-to-Speech) FONKSİYONU
+# ============================================
+def sesli_oku(metin: str) -> str:
+    """
+    Metni Türkçe sese çevirir ve HTML audio player döner.
+    gTTS kullanır - internet bağlantısı gerektirir.
+    """
+    try:
+        from gtts import gTTS
+        
+        # Metni temizle (çok uzunsa kısalt)
+        temiz_metin = metin[:2000] if len(metin) > 2000 else metin
+        
+        # Özel karakterleri temizle
+        temiz_metin = temiz_metin.replace("===", "").replace("---", "")
+        temiz_metin = temiz_metin.replace("📊", "").replace("🚨", "").replace("✅", "")
+        temiz_metin = temiz_metin.replace("❌", "").replace("⚠️", "").replace("🔴", "")
+        temiz_metin = temiz_metin.replace("🏆", "").replace("🏪", "").replace("🏭", "")
+        temiz_metin = temiz_metin.replace("📦", "").replace("💰", "").replace("📈", "")
+        
+        # TTS oluştur
+        tts = gTTS(text=temiz_metin, lang='tr', slow=False)
+        
+        # BytesIO'ya kaydet
+        audio_buffer = BytesIO()
+        tts.write_to_fp(audio_buffer)
+        audio_buffer.seek(0)
+        
+        # Base64'e çevir
+        audio_base64 = base64.b64encode(audio_buffer.read()).decode()
+        
+        # HTML audio player (autoplay)
+        audio_html = f'''
+        <audio autoplay controls style="width: 100%; margin-top: 10px;">
+            <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
+        </audio>
+        '''
+        return audio_html
+        
+    except ImportError:
+        return "<p style='color: orange;'>⚠️ Sesli okuma için: pip install gTTS</p>"
+    except Exception as e:
+        return f"<p style='color: red;'>❌ Ses hatası: {str(e)}</p>"
 
 # Sayfa ayarları
 st.set_page_config(
@@ -149,6 +197,16 @@ with st.sidebar:
     
     st.markdown("---")
     
+    # 🔊 Sesli Yanıt Ayarı
+    st.subheader("🔊 Sesli Yanıt")
+    sesli_aktif = st.toggle("Cevapları sesli oku", value=False, help="Sanal Planner cevaplarını Türkçe sesli okur")
+    st.session_state['sesli_aktif'] = sesli_aktif
+    
+    if sesli_aktif:
+        st.caption("🎧 Cevaplar otomatik okunacak")
+    
+    st.markdown("---")
+    
     # Hızlı Komutlar
     st.subheader("⚡ Hızlı Komutlar")
     
@@ -219,6 +277,11 @@ if mesaj:
                     st.session_state['messages'].append({'role': 'agent', 'content': sonuc})
                     # Cevabı göster
                     st.markdown(f'<div class="chat-message agent-message">🤖 {sonuc}</div>', unsafe_allow_html=True)
+                    
+                    # 🔊 Sesli okuma aktifse oku
+                    if st.session_state.get('sesli_aktif', False):
+                        audio_html = sesli_oku(sonuc)
+                        st.markdown(audio_html, unsafe_allow_html=True)
                 else:
                     st.session_state['messages'].append({'role': 'user', 'content': mesaj})
                     st.session_state['messages'].append({'role': 'agent', 'content': "⚠️ Agent yanıt vermedi. Lütfen tekrar deneyin."})
