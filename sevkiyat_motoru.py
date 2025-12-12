@@ -6,6 +6,13 @@ Bu modül R4U'nun sevkiyat algoritmasını içerir:
 1. Segmentasyon (ürün/mağaza cover grupları)
 2. İhtiyaç hesaplama (RPT, Initial, Min)
 3. Depo stok dağıtımı
+
+KupVeri property'leri ile çalışır:
+- kup.stok_satis (anlık stok satış)
+- kup.urun_master
+- kup.magaza_master
+- kup.depo_stok
+- kup.kpi
 """
 
 import pandas as pd
@@ -25,7 +32,7 @@ class SevkiyatMotoru:
     def __init__(self, kup_veri):
         """
         Args:
-            kup_veri: KupVeri instance (anlik_stok_satis, urun_master, magaza_master, depo_stok, kpi)
+            kup_veri: KupVeri instance (stok_satis, urun_master, magaza_master, depo_stok, kpi)
         """
         self.kup = kup_veri
         
@@ -37,6 +44,14 @@ class SevkiyatMotoru:
         self.default_sisme = 0.5
         self.default_genlestirme = 1.0
         self.default_min_oran = 1.0
+        
+    def _get_stok_satis(self):
+        """stok_satis veya anlik_stok_satis property'sini al"""
+        if hasattr(self.kup, 'stok_satis') and self.kup.stok_satis is not None and len(self.kup.stok_satis) > 0:
+            return self.kup.stok_satis
+        if hasattr(self.kup, 'anlik_stok_satis') and self.kup.anlik_stok_satis is not None and len(self.kup.anlik_stok_satis) > 0:
+            return self.kup.anlik_stok_satis
+        return None
         
     def hesapla(
         self,
@@ -114,7 +129,8 @@ class SevkiyatMotoru:
     
     def _veri_kontrol(self) -> bool:
         """Gerekli verilerin varlığını kontrol et"""
-        if self.kup.anlik_stok_satis is None or len(self.kup.anlik_stok_satis) == 0:
+        stok_satis = self._get_stok_satis()
+        if stok_satis is None or len(stok_satis) == 0:
             return False
         if self.kup.depo_stok is None or len(self.kup.depo_stok) == 0:
             return False
@@ -122,7 +138,7 @@ class SevkiyatMotoru:
     
     def _veri_hazirla(self, kategori_kod: Optional[int], marka_kod: Optional[str]) -> pd.DataFrame:
         """Ana veriyi hazırla ve filtrele"""
-        df = self.kup.anlik_stok_satis.copy()
+        df = self._get_stok_satis().copy()
         df['urun_kod'] = df['urun_kod'].astype(str)
         df['magaza_kod'] = df['magaza_kod'].astype(str)
         
@@ -168,15 +184,18 @@ class SevkiyatMotoru:
     def _segmentasyon_uygula(self, df: pd.DataFrame) -> pd.DataFrame:
         """Ürün ve mağaza segmentasyonu uygula"""
         
+        # Ana veriyi al
+        stok_satis = self._get_stok_satis()
+        
         # Ürün bazında toplam stok/satış
-        urun_agg = df.groupby('urun_kod').agg({
+        urun_agg = stok_satis.groupby('urun_kod').agg({
             'stok': 'sum',
             'satis': 'sum'
         }).reset_index()
         urun_agg['urun_oran'] = urun_agg['stok'] / urun_agg['satis'].replace(0, 1)
         
         # Mağaza bazında toplam stok/satış
-        magaza_agg = df.groupby('magaza_kod').agg({
+        magaza_agg = stok_satis.groupby('magaza_kod').agg({
             'stok': 'sum',
             'satis': 'sum'
         }).reset_index()
