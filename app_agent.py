@@ -1,7 +1,7 @@
 """
 SANAL PLANNER - Agentic Streamlit Arayüzü
 Claude API Tool Calling ile akıllı retail planner
-🔊 Sesli Yanıt Özellikli
+🔊 Sesli Yanıt Özellikli (Edge TTS - Kaliteli Türkçe)
 """
 
 import streamlit as st
@@ -10,20 +10,25 @@ from datetime import datetime
 import os
 import base64
 from io import BytesIO
+import asyncio
 
 # ============================================
-# 🔊 TTS (Text-to-Speech) FONKSİYONU
+# 🔊 TTS (Text-to-Speech) FONKSİYONU - EDGE TTS
 # ============================================
-def sesli_oku(metin: str) -> str:
+def sesli_oku(metin: str, ses: str = "tr-TR-AhmetNeural") -> str:
     """
     Metni Türkçe sese çevirir ve HTML audio player döner.
-    gTTS kullanır - internet bağlantısı gerektirir.
+    Edge TTS kullanır - ÜCRETSİZ ve kaliteli!
+    
+    Ses seçenekleri:
+    - tr-TR-AhmetNeural (Erkek - varsayılan)
+    - tr-TR-EmelNeural (Kadın)
     """
     try:
-        from gtts import gTTS
+        import edge_tts
         
         # Metni temizle (çok uzunsa kısalt)
-        temiz_metin = metin[:2000] if len(metin) > 2000 else metin
+        temiz_metin = metin[:3000] if len(metin) > 3000 else metin
         
         # Özel karakterleri temizle
         temiz_metin = temiz_metin.replace("===", "").replace("---", "")
@@ -31,28 +36,40 @@ def sesli_oku(metin: str) -> str:
         temiz_metin = temiz_metin.replace("❌", "").replace("⚠️", "").replace("🔴", "")
         temiz_metin = temiz_metin.replace("🏆", "").replace("🏪", "").replace("🏭", "")
         temiz_metin = temiz_metin.replace("📦", "").replace("💰", "").replace("📈", "")
+        temiz_metin = temiz_metin.replace("🤖", "").replace("🧑", "").replace("💬", "")
+        temiz_metin = temiz_metin.replace("*", "").replace("#", "")
         
-        # TTS oluştur
-        tts = gTTS(text=temiz_metin, lang='tr', slow=False)
+        # Async fonksiyonu çalıştır
+        async def generate_audio():
+            communicate = edge_tts.Communicate(temiz_metin, ses)
+            audio_buffer = BytesIO()
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_buffer.write(chunk["data"])
+            return audio_buffer.getvalue()
         
-        # BytesIO'ya kaydet
-        audio_buffer = BytesIO()
-        tts.write_to_fp(audio_buffer)
-        audio_buffer.seek(0)
+        # Event loop
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        audio_data = loop.run_until_complete(generate_audio())
         
         # Base64'e çevir
-        audio_base64 = base64.b64encode(audio_buffer.read()).decode()
+        audio_base64 = base64.b64encode(audio_data).decode()
         
         # HTML audio player (autoplay)
         audio_html = f'''
-        <audio autoplay controls style="width: 100%; margin-top: 10px;">
+        <audio autoplay controls style="width: 100%; margin-top: 10px; border-radius: 10px;">
             <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
         </audio>
         '''
         return audio_html
         
     except ImportError:
-        return "<p style='color: orange;'>⚠️ Sesli okuma için: pip install gTTS</p>"
+        return "<p style='color: orange;'>⚠️ Sesli okuma için: pip install edge-tts</p>"
     except Exception as e:
         return f"<p style='color: red;'>❌ Ses hatası: {str(e)}</p>"
 
@@ -203,7 +220,16 @@ with st.sidebar:
     st.session_state['sesli_aktif'] = sesli_aktif
     
     if sesli_aktif:
-        st.caption("🎧 Cevaplar otomatik okunacak")
+        ses_secimi = st.radio(
+            "Ses seçin:",
+            options=["👨 Ahmet (Erkek)", "👩 Emel (Kadın)"],
+            horizontal=True
+        )
+        if "Ahmet" in ses_secimi:
+            st.session_state['ses_turu'] = "tr-TR-AhmetNeural"
+        else:
+            st.session_state['ses_turu'] = "tr-TR-EmelNeural"
+        st.caption("🎧 Microsoft Edge TTS - Doğal Türkçe ses")
     
     st.markdown("---")
     
@@ -280,7 +306,8 @@ if mesaj:
                     
                     # 🔊 Sesli okuma aktifse oku
                     if st.session_state.get('sesli_aktif', False):
-                        audio_html = sesli_oku(sonuc)
+                        ses_turu = st.session_state.get('ses_turu', 'tr-TR-AhmetNeural')
+                        audio_html = sesli_oku(sonuc, ses=ses_turu)
                         st.markdown(audio_html, unsafe_allow_html=True)
                 else:
                     st.session_state['messages'].append({'role': 'user', 'content': mesaj})
