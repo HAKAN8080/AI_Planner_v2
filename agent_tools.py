@@ -1202,20 +1202,30 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
     import time
     start_time = time.time()
     
-    client = anthropic.Anthropic(api_key=api_key, timeout=120.0)  # 2 dakika timeout
+    print(f"\n🤖 AGENT BAŞLADI: {kullanici_mesaji[:50]}...")
+    print(f"   API Key: {api_key[:20]}...")
+    
+    try:
+        client = anthropic.Anthropic(api_key=api_key, timeout=60.0)
+        print("   ✅ Anthropic client oluşturuldu")
+    except Exception as e:
+        print(f"   ❌ Client hatası: {e}")
+        return f"❌ API Client hatası: {str(e)}"
     
     messages = [{"role": "user", "content": kullanici_mesaji}]
     
     tum_cevaplar = []
-    max_iterasyon = 5  # 10'dan 5'e düşürdüm
+    max_iterasyon = 5
     iterasyon = 0
     
     while iterasyon < max_iterasyon:
         iterasyon += 1
+        print(f"\n   📡 İterasyon {iterasyon} - API çağrısı yapılıyor...")
         
-        # Süre kontrolü - 90 saniyeyi geçerse dur
-        if time.time() - start_time > 90:
-            tum_cevaplar.append("\n⏱️ Zaman limiti aşıldı. Mevcut bulgular yukarıda.")
+        # Süre kontrolü - 60 saniyeyi geçerse dur
+        if time.time() - start_time > 60:
+            print("   ⏱️ Zaman aşımı!")
+            tum_cevaplar.append("\n⏱️ Zaman limiti aşıldı.")
             break
         
         try:
@@ -1226,6 +1236,7 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
                 tools=TOOLS,
                 messages=messages
             )
+            print(f"   ✅ API yanıt aldı: stop_reason={response.stop_reason}")
         except Exception as api_error:
             tum_cevaplar.append(f"\n❌ API Hatası: {str(api_error)}")
             break
