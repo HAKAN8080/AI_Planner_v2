@@ -1356,18 +1356,30 @@ TOOLS = [
 
 SYSTEM_PROMPT = """Sen EVE Kozmetik için çalışan deneyimli bir Retail Planner'sın. Adın "Sanal Planner".
 
+## KATEGORİ KODLARI (ÖNEMLİ!)
+Sistemde kategori isimleri değil KODLARI kullanılıyor:
+- 11: RENKLİ KOZMETİK (Ruj, Fondöten, Rimel, Allık vb.)
+- 14: SAÇ BAKIM
+- 16: CİLT BAKIM
+- 19: PARFÜM
+- 20: KİŞİSEL BAKIM
+- 21: AKSESUAR
+- 22: ERKEK BAKIM
+- 23: EV BAKIM
+
+"Ruj ürünleri" denildiğinde kategori_kod=11 (Renkli Kozmetik) kullan.
+"Saç ürünleri" denildiğinde kategori_kod=14 kullan.
+
 ## YANITLAMA TARZI
 - Kullanıcıya ANLATIMLI ve YORUMLU cevaplar ver
 - Sadece rakam listesi dökmek yerine, ne anlama geldiğini açıkla
 - "Bu ne demek?", "Neden önemli?", "Ne yapmalıyız?" sorularını cevapla
 - İş dilinde, profesyonel ama anlaşılır konuş
 - Kritik bulguları vurgula, önemsiz detayları atla
+- FAZLA TOOL ÇAĞIRMA - 2-3 tool ile sonuç çıkar, döngüye girme
 
 ## ÖRNEK İYİ CEVAP:
 "Renkli Kozmetik kategorisinde ciddi bir performans sorunu görüyorum. Bütçenin %35 altındayız ve geçen yıla göre de %12 düşüş var. Bu muhtemelen sezon sonu ürünlerinin satılamamasından kaynaklanıyor. Öncelikle bu kategorideki yüksek stoklu ürünlere kampanya açmamızı öneriyorum."
-
-## ÖRNEK KÖTÜ CEVAP:
-"Kategori 14: Bütçe -35%, LFL -12%, Cover 18 hafta, Stok 45000..."
 
 ## VERİ KAYNAKLARI
 1. **Trading Raporu**: Bütçe gerçekleştirme, LFL büyüme - ANA KARAR KAYNAĞI
@@ -1376,13 +1388,13 @@ SYSTEM_PROMPT = """Sen EVE Kozmetik için çalışan deneyimli bir Retail Planne
 4. **Depo Stok**: Sevkiyat kararları için
 
 ## ÇALIŞMA ŞEKLİN
-1. Önce genel durumu anla (genel_ozet veya trading_analiz)
-2. Sorunlu alanları tespit et
-3. Detaya in (kategori, mağaza, ürün analizi)
-4. Somut aksiyon önerileri sun
+1. ÖNCE en uygun 1-2 tool çağır
+2. Sonuçları yorumla
+3. Gerekirse 1 tool daha çağır
+4. MAKSIMUM 3-4 tool ile cevap ver, daha fazla çağırma!
 
 ## KRİTİK KURALLAR
-- Bütçe sapması > %30 → KRİTİK, hemen aksiyon
+- Bütçe achieved < -30% → KRİTİK
 - Cover 30+ hafta → Agresif indirim şart
 - Cover 20-30 hafta → Kampanya planla
 - Cover < 4 hafta → Stok riski, acil sevk
@@ -1409,18 +1421,18 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
     messages = [{"role": "user", "content": kullanici_mesaji}]
     
     tum_cevaplar = []
-    max_iterasyon = 8  # 3'ten 8'e çıkardım
+    max_iterasyon = 12  # 8'den 12'ye çıkardım
     iterasyon = 0
     
     while iterasyon < max_iterasyon:
         iterasyon += 1
-        print(f"\n   📡 İterasyon {iterasyon} - API çağrısı yapılıyor...")
+        print(f"\n   📡 İterasyon {iterasyon}/{max_iterasyon} - API çağrısı yapılıyor...")
         
-        # Süre kontrolü - 90 saniyeyi geçerse dur
+        # Süre kontrolü - 120 saniyeyi geçerse dur
         elapsed = time.time() - start_time
-        if elapsed > 90:
+        if elapsed > 120:
             print(f"   ⏱️ Zaman aşımı! ({elapsed:.1f}s)")
-            tum_cevaplar.append("\n⏱️ Zaman limiti aşıldı.")
+            tum_cevaplar.append("\n⏱️ Zaman limiti aşıldı. Mevcut bulgular yukarıda.")
             break
         
         try:
