@@ -1224,7 +1224,7 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod: int = None, marka_kod: str = No
     R4U Allocator motorunu çalıştırarak sevkiyat hesaplaması yapar.
     
     Args:
-        kup: KupVeri instance
+        kup: KupVeri instance (stok_satis, urun_master, magaza_master, depo_stok, kpi)
         kategori_kod: Kategori filtresi (11=Renkli Kozmetik, vb.)
         marka_kod: Marka filtresi
         forward_cover: Hedef cover değeri
@@ -1237,26 +1237,18 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod: int = None, marka_kod: str = No
     except ImportError:
         return "❌ Sevkiyat motoru modülü bulunamadı (sevkiyat_motoru.py)"
     
-    # KupVeri'yi SevkiyatMotoru'nun beklediği formata çevir
-    class KupAdapter:
-        def __init__(self, kup):
-            self.anlik_stok_satis = kup.stok_satis if hasattr(kup, 'stok_satis') else None
-            self.urun_master = kup.urun_master if hasattr(kup, 'urun_master') else None
-            self.magaza_master = kup.magaza_master if hasattr(kup, 'magaza_master') else None
-            self.depo_stok = kup.depo_stok if hasattr(kup, 'depo_stok') else None
-            self.kpi = kup.kpi if hasattr(kup, 'kpi') else None
+    # Veri kontrolü - KupVeri doğrudan kullanılıyor
+    stok_satis = getattr(kup, 'stok_satis', None)
+    depo_stok = getattr(kup, 'depo_stok', None)
     
-    adapter = KupAdapter(kup)
+    if stok_satis is None or len(stok_satis) == 0:
+        return "❌ Anlık stok/satış verisi yüklenmemiş. Lütfen anlik_stok_satis.csv dosyasını yükleyin."
     
-    # Veri kontrolü
-    if adapter.anlik_stok_satis is None or len(adapter.anlik_stok_satis) == 0:
-        return "❌ Anlık stok/satış verisi yüklenmemiş."
+    if depo_stok is None or len(depo_stok) == 0:
+        return "❌ Depo stok verisi yüklenmemiş. Lütfen depo_stok.csv dosyasını yükleyin."
     
-    if adapter.depo_stok is None or len(adapter.depo_stok) == 0:
-        return "❌ Depo stok verisi yüklenmemiş."
-    
-    # Motor oluştur ve hesapla
-    motor = SevkiyatMotoru(adapter)
+    # Motor oluştur ve hesapla - KupVeri doğrudan geçiriliyor
+    motor = SevkiyatMotoru(kup)
     
     sonuc = motor.hesapla(
         kategori_kod=kategori_kod,
