@@ -143,7 +143,7 @@ class SevkiyatMotoru:
         df['magaza_kod'] = df['magaza_kod'].astype(str)
         
         # Ürün master varsa birleştir
-        if self.kup.urun_master is not None:
+        if self.kup.urun_master is not None and len(self.kup.urun_master) > 0:
             urun_m = self.kup.urun_master.copy()
             urun_m['urun_kod'] = urun_m['urun_kod'].astype(str)
             
@@ -151,8 +151,11 @@ class SevkiyatMotoru:
             urun_cols = ['urun_kod']
             if 'kategori_kod' in urun_m.columns:
                 urun_cols.append('kategori_kod')
+                # Kategori kodunu int'e çevir
+                urun_m['kategori_kod'] = pd.to_numeric(urun_m['kategori_kod'], errors='coerce').fillna(0).astype(int)
             if 'marka_kod' in urun_m.columns:
                 urun_cols.append('marka_kod')
+                urun_m['marka_kod'] = urun_m['marka_kod'].astype(str)
             if 'mg' in urun_m.columns:
                 urun_cols.append('mg')
             
@@ -160,14 +163,15 @@ class SevkiyatMotoru:
             
             # Kategori filtresi
             if kategori_kod is not None and 'kategori_kod' in df.columns:
-                df = df[df['kategori_kod'] == kategori_kod]
+                df['kategori_kod'] = pd.to_numeric(df['kategori_kod'], errors='coerce').fillna(0).astype(int)
+                df = df[df['kategori_kod'] == int(kategori_kod)]
             
             # Marka filtresi
             if marka_kod is not None and 'marka_kod' in df.columns:
-                df = df[df['marka_kod'] == marka_kod]
+                df = df[df['marka_kod'] == str(marka_kod)]
         
         # Mağaza master varsa depo kodunu ekle
-        if self.kup.magaza_master is not None:
+        if self.kup.magaza_master is not None and len(self.kup.magaza_master) > 0:
             mag_m = self.kup.magaza_master.copy()
             mag_m['magaza_kod'] = mag_m['magaza_kod'].astype(str)
             
