@@ -1219,7 +1219,7 @@ def bolge_karsilastir(kup: KupVeri) -> str:
     return "\n".join(sonuc)
 
 
-def sevkiyat_hesapla(kup: KupVeri, kategori_kod: int = None, marka_kod: str = None, forward_cover: float = 7.0) -> str:
+def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, marka_kod: str = None, forward_cover: float = 7.0) -> str:
     """
     R4U Allocator motorunu çalıştırarak sevkiyat hesaplaması yapar.
     
@@ -1234,8 +1234,21 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod: int = None, marka_kod: str = No
     """
     try:
         from sevkiyat_motoru import SevkiyatMotoru
-    except ImportError:
-        return "❌ Sevkiyat motoru modülü bulunamadı (sevkiyat_motoru.py)"
+    except ImportError as e:
+        return f"❌ Sevkiyat motoru modülü bulunamadı: {str(e)}"
+    
+    # Tip dönüşümleri
+    if kategori_kod is not None:
+        try:
+            kategori_kod = int(kategori_kod)
+        except (ValueError, TypeError):
+            return f"❌ Geçersiz kategori kodu: {kategori_kod}"
+    
+    if forward_cover is not None:
+        try:
+            forward_cover = float(forward_cover)
+        except (ValueError, TypeError):
+            forward_cover = 7.0
     
     # Veri kontrolü - KupVeri doğrudan kullanılıyor
     stok_satis = getattr(kup, 'stok_satis', None)
@@ -1247,23 +1260,28 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod: int = None, marka_kod: str = No
     if depo_stok is None or len(depo_stok) == 0:
         return "❌ Depo stok verisi yüklenmemiş. Lütfen depo_stok.csv dosyasını yükleyin."
     
-    # Motor oluştur ve hesapla - KupVeri doğrudan geçiriliyor
-    motor = SevkiyatMotoru(kup)
-    
-    sonuc = motor.hesapla(
-        kategori_kod=kategori_kod,
-        marka_kod=marka_kod,
-        forward_cover=forward_cover
-    )
-    
-    if sonuc['hata']:
-        return f"❌ Hesaplama hatası: {sonuc['hata']}"
-    
-    ozet = sonuc['ozet']
-    df = sonuc['sonuc']
-    
-    if df is None or len(df) == 0:
-        return "ℹ️ Sevkiyat ihtiyacı bulunamadı. Tüm mağazaların stoku yeterli görünüyor."
+    try:
+        # Motor oluştur ve hesapla - KupVeri doğrudan geçiriliyor
+        motor = SevkiyatMotoru(kup)
+        
+        sonuc = motor.hesapla(
+            kategori_kod=kategori_kod,
+            marka_kod=marka_kod,
+            forward_cover=forward_cover
+        )
+        
+        if sonuc['hata']:
+            return f"❌ Hesaplama hatası: {sonuc['hata']}"
+        
+        ozet = sonuc['ozet']
+        df = sonuc['sonuc']
+        
+        if df is None or len(df) == 0:
+            return "ℹ️ Sevkiyat ihtiyacı bulunamadı. Tüm mağazaların stoku yeterli görünüyor."
+            
+    except Exception as e:
+        import traceback
+        return f"❌ Sevkiyat motoru hatası: {str(e)}\n\nDetay: {traceback.format_exc()[:500]}"
     
     # Rapor oluştur
     rapor = []
