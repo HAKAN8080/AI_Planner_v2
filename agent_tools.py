@@ -1232,15 +1232,27 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, marka_kod: str = None, f
     Returns:
         str: Sevkiyat özeti ve detayları
     """
+    # Debug: Veri durumunu kontrol et
+    debug_info = []
+    debug_info.append("🔍 DEBUG: Veri kontrolü")
+    debug_info.append(f"   - stok_satis: {len(getattr(kup, 'stok_satis', [])) if hasattr(kup, 'stok_satis') and kup.stok_satis is not None else 'YOK'}")
+    debug_info.append(f"   - depo_stok: {len(getattr(kup, 'depo_stok', [])) if hasattr(kup, 'depo_stok') and kup.depo_stok is not None else 'YOK'}")
+    debug_info.append(f"   - urun_master: {len(getattr(kup, 'urun_master', [])) if hasattr(kup, 'urun_master') and kup.urun_master is not None else 'YOK'}")
+    debug_info.append(f"   - magaza_master: {len(getattr(kup, 'magaza_master', [])) if hasattr(kup, 'magaza_master') and kup.magaza_master is not None else 'YOK'}")
+    debug_info.append(f"   - kategori_kod param: {kategori_kod}")
+    print("\n".join(debug_info))
+    
     try:
         from sevkiyat_motoru import SevkiyatMotoru
+        print("   ✅ sevkiyat_motoru import edildi")
     except ImportError as e:
-        return f"❌ Sevkiyat motoru modülü bulunamadı: {str(e)}"
+        return f"❌ Sevkiyat motoru modülü bulunamadı: {str(e)}\n\nLütfen sevkiyat_motoru.py dosyasının aynı klasörde olduğundan emin olun."
     
     # Tip dönüşümleri
     if kategori_kod is not None:
         try:
             kategori_kod = int(kategori_kod)
+            print(f"   ✅ kategori_kod dönüştürüldü: {kategori_kod}")
         except (ValueError, TypeError):
             return f"❌ Geçersiz kategori kodu: {kategori_kod}"
     
@@ -1260,15 +1272,27 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, marka_kod: str = None, f
     if depo_stok is None or len(depo_stok) == 0:
         return "❌ Depo stok verisi yüklenmemiş. Lütfen depo_stok.csv dosyasını yükleyin."
     
+    # Kategori kontrolü
+    if kategori_kod is not None and hasattr(kup, 'urun_master') and kup.urun_master is not None:
+        if 'kategori_kod' in kup.urun_master.columns:
+            urun_master = kup.urun_master.copy()
+            urun_master['kategori_kod'] = pd.to_numeric(urun_master['kategori_kod'], errors='coerce').fillna(0).astype(int)
+            kategori_urunleri = urun_master[urun_master['kategori_kod'] == kategori_kod]['urun_kod'].nunique()
+            print(f"   📊 Kategori {kategori_kod} için {kategori_urunleri} ürün bulundu")
+            if kategori_urunleri == 0:
+                return f"⚠️ Kategori {kategori_kod} için ürün bulunamadı. Lütfen kategori kodunu kontrol edin."
+    
     try:
         # Motor oluştur ve hesapla - KupVeri doğrudan geçiriliyor
         motor = SevkiyatMotoru(kup)
+        print("   ✅ SevkiyatMotoru oluşturuldu")
         
         sonuc = motor.hesapla(
             kategori_kod=kategori_kod,
             marka_kod=marka_kod,
             forward_cover=forward_cover
         )
+        print(f"   ✅ Hesaplama tamamlandı, hata: {sonuc.get('hata', 'Yok')}")
         
         if sonuc['hata']:
             return f"❌ Hesaplama hatası: {sonuc['hata']}"
