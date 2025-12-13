@@ -304,10 +304,24 @@ if mesaj:
                     # Cevabı göster
                     st.markdown(f'<div class="chat-message agent-message">🤖 {sonuc}</div>', unsafe_allow_html=True)
                     
-                    # 🔊 Sesli okuma aktifse oku
+                    # 🔊 Sesli okuma aktifse oku (sadece tablo öncesi kısmı)
                     if st.session_state.get('sesli_aktif', False):
+                        # Tablodan önceki kısmı al (📊 veya | işaretine kadar)
+                        sesli_metin = sonuc
+                        if "📊" in sesli_metin:
+                            sesli_metin = sesli_metin.split("📊")[0]
+                        elif "|" in sesli_metin and "---" in sesli_metin:
+                            # Markdown tablo var, öncesini al
+                            lines = sesli_metin.split("\n")
+                            sesli_lines = []
+                            for line in lines:
+                                if "|" in line or "---" in line:
+                                    break
+                                sesli_lines.append(line)
+                            sesli_metin = "\n".join(sesli_lines)
+                        
                         ses_turu = st.session_state.get('ses_turu', 'tr-TR-AhmetNeural')
-                        audio_html = sesli_oku(sonuc, ses=ses_turu)
+                        audio_html = sesli_oku(sesli_metin.strip(), ses=ses_turu)
                         st.markdown(audio_html, unsafe_allow_html=True)
                 else:
                     st.session_state['messages'].append({'role': 'user', 'content': mesaj})
