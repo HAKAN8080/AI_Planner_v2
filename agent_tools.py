@@ -12,17 +12,9 @@ import os
 import glob
 import sys
 
-# Sevkiyat motorunu import et (aynı klasörde olmalı)
-try:
-    from sevkiyat_motoru import SevkiyatMotoru
-    SEVKIYAT_MOTORU_AVAILABLE = True
-    print("✅ sevkiyat_motoru başarıyla import edildi")
-except ImportError as e:
-    SEVKIYAT_MOTORU_AVAILABLE = False
-    print(f"⚠️ sevkiyat_motoru import edilemedi: {e}")
-    print(f"   Python path: {sys.path[:3]}")
-    print(f"   Mevcut dizin: {os.getcwd()}")
-    print(f"   Dosyalar: {os.listdir('.')[:10]}")
+# Sevkiyat motoru artık INLINE - ayrı modül yok
+SEVKIYAT_MOTORU_AVAILABLE = True  # Her zaman True çünkü inline
+print("✅ Sevkiyat hesaplama INLINE modda çalışıyor")
 
 # =============================================================================
 # VERİ YÜKLEYİCİ
@@ -1234,162 +1226,215 @@ def bolge_karsilastir(kup: KupVeri) -> str:
 
 def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, marka_kod: str = None, forward_cover: float = 7.0) -> str:
     """
-    R4U Allocator motorunu çalıştırarak sevkiyat hesaplaması yapar.
-    
-    Args:
-        kup: KupVeri instance (stok_satis, urun_master, magaza_master, depo_stok, kpi)
-        kategori_kod: Kategori filtresi (11=Renkli Kozmetik, vb.)
-        urun_kod: Tek ürün filtresi (opsiyonel)
-        marka_kod: Marka filtresi
-        forward_cover: Hedef cover değeri
-    
-    Returns:
-        str: Sevkiyat özeti ve detayları
+    Sevkiyat hesaplaması - INLINE versiyon (ayrı modül yok)
     """
     print("\n" + "="*50)
-    print("🚀 SEVKIYAT_HESAPLA ÇAĞRILDI")
-    print(f"   Parametreler: kategori={kategori_kod}, urun={urun_kod}, marka={marka_kod}, fc={forward_cover}")
+    print("🚀 SEVKIYAT_HESAPLA ÇAĞRILDI (INLINE)")
+    print(f"   Parametreler: kategori={kategori_kod}, urun={urun_kod}, fc={forward_cover}")
     print("="*50)
     
-    # Global import kontrolü
-    if not SEVKIYAT_MOTORU_AVAILABLE:
-        print("❌ SEVKIYAT_MOTORU_AVAILABLE = False")
-        return "❌ Sevkiyat motoru yüklenemedi. Lütfen sevkiyat_motoru.py dosyasının mevcut olduğundan emin olun."
-    
-    print("✅ SEVKIYAT_MOTORU_AVAILABLE = True")
-    
-    # Debug: Veri durumunu kontrol et
-    print(f"📊 Veri kontrolü:")
-    print(f"   - stok_satis: {len(kup.stok_satis) if hasattr(kup, 'stok_satis') and kup.stok_satis is not None else 'YOK'}")
-    print(f"   - depo_stok: {len(kup.depo_stok) if hasattr(kup, 'depo_stok') and kup.depo_stok is not None else 'YOK'}")
-    print(f"   - urun_master: {len(kup.urun_master) if hasattr(kup, 'urun_master') and kup.urun_master is not None else 'YOK'}")
-    print(f"   - kategori_kod param: {kategori_kod}")
-    
-    # Tip dönüşümleri
-    if kategori_kod is not None:
-        try:
-            kategori_kod = int(kategori_kod)
-            print(f"   ✅ kategori_kod dönüştürüldü: {kategori_kod}")
-        except (ValueError, TypeError):
-            return f"❌ Geçersiz kategori kodu: {kategori_kod}"
-    
-    if forward_cover is not None:
-        try:
-            forward_cover = float(forward_cover)
-        except (ValueError, TypeError):
-            forward_cover = 7.0
-    
-    # Veri kontrolü
-    stok_satis = getattr(kup, 'stok_satis', None)
-    depo_stok = getattr(kup, 'depo_stok', None)
-    
-    if stok_satis is None or len(stok_satis) == 0:
-        print("❌ stok_satis boş veya yok")
-        return "❌ Anlık stok/satış verisi yüklenmemiş. Lütfen anlik_stok_satis.csv dosyasını yükleyin."
-    
-    if depo_stok is None or len(depo_stok) == 0:
-        print("❌ depo_stok boş veya yok")
-        return "❌ Depo stok verisi yüklenmemiş. Lütfen depo_stok.csv dosyasını yükleyin."
-    
-    print("✅ Veri kontrolleri geçti")
-    
     try:
-        # Motor oluştur
-        print("🔧 SevkiyatMotoru oluşturuluyor...")
-        motor = SevkiyatMotoru(kup)
-        print("✅ SevkiyatMotoru oluşturuldu")
+        # 1. VERİ KONTROLÜ
+        stok_satis = getattr(kup, 'stok_satis', None)
+        depo_stok = getattr(kup, 'depo_stok', None)
         
-        # Hesapla
-        print(f"🔧 Hesaplama başlıyor (kategori={kategori_kod}, urun={urun_kod}, fc={forward_cover})...")
-        sonuc = motor.hesapla(
-            kategori_kod=kategori_kod,
-            urun_kod=urun_kod,
-            marka_kod=marka_kod,
-            forward_cover=forward_cover
-        )
-        print(f"✅ Hesaplama tamamlandı")
+        if stok_satis is None or len(stok_satis) == 0:
+            return "❌ Anlık stok/satış verisi yüklenmemiş."
         
-        if sonuc['hata']:
-            print(f"❌ Motor hatası: {sonuc['hata']}")
-            return f"❌ Hesaplama hatası: {sonuc['hata']}"
+        if depo_stok is None or len(depo_stok) == 0:
+            return "❌ Depo stok verisi yüklenmemiş."
         
-        ozet = sonuc['ozet']
-        df = sonuc['sonuc']
+        print(f"✅ Veri OK: stok_satis={len(stok_satis)}, depo_stok={len(depo_stok)}")
         
-        print(f"📊 Sonuç: {len(df) if df is not None else 0} satır")
+        # 2. ANA VERİYİ HAZIRLA
+        df = stok_satis.copy()
+        df['urun_kod'] = df['urun_kod'].astype(str)
+        df['magaza_kod'] = df['magaza_kod'].astype(str)
+        print(f"   Başlangıç: {len(df)} satır, kolonlar: {list(df.columns)[:10]}...")
         
-        if df is None or len(df) == 0:
-            return "ℹ️ Sevkiyat ihtiyacı bulunamadı. Tüm mağazaların stoku yeterli görünüyor."
+        # Ürün filtresi
+        if urun_kod is not None:
+            urun_kod = str(urun_kod).strip()
+            df = df[df['urun_kod'] == urun_kod]
+            print(f"   Ürün filtresi ({urun_kod}): {len(df)} satır")
+            if len(df) == 0:
+                return f"❌ {urun_kod} kodlu ürün bulunamadı."
+        
+        # Kategori filtresi
+        if kategori_kod is not None:
+            kategori_kod = int(kategori_kod)
+            if 'kategori_kod' in df.columns:
+                df['kategori_kod'] = pd.to_numeric(df['kategori_kod'], errors='coerce').fillna(0).astype(int)
+                df = df[df['kategori_kod'] == kategori_kod]
+                print(f"   Kategori filtresi ({kategori_kod}): {len(df)} satır")
+        
+        if len(df) == 0:
+            return "❌ Filtrelere uygun veri bulunamadı."
+        
+        # 3. DEPO KODU EKLE (stok_satis'te varsa kullan, yoksa mağaza master'dan al)
+        if 'depo_kod' not in df.columns:
+            mag_m = getattr(kup, 'magaza_master', None)
+            if mag_m is not None and 'depo_kod' in mag_m.columns:
+                mag_m = mag_m.copy()
+                mag_m['magaza_kod'] = mag_m['magaza_kod'].astype(str)
+                df = df.merge(mag_m[['magaza_kod', 'depo_kod']], on='magaza_kod', how='left')
+                df['depo_kod'] = pd.to_numeric(df['depo_kod'], errors='coerce').fillna(9001).astype(int)
+                print(f"   Mağaza master'dan depo_kod eklendi")
+            else:
+                df['depo_kod'] = 9001
+                print(f"   Default depo_kod=9001 kullanıldı")
+        else:
+            df['depo_kod'] = pd.to_numeric(df['depo_kod'], errors='coerce').fillna(9001).astype(int)
+            print(f"   depo_kod zaten var: {df['depo_kod'].unique()[:5]}")
+        
+        # 4. SATIŞ VE COVER HESAPLA
+        df['satis'] = pd.to_numeric(df['satis'], errors='coerce').fillna(0)
+        df['stok'] = pd.to_numeric(df['stok'], errors='coerce').fillna(0)
+        df['yol'] = pd.to_numeric(df.get('yol', 0), errors='coerce').fillna(0)
+        
+        df['gunluk_satis'] = df['satis'] / 7  # Haftalık satışı günlüğe çevir
+        df['mevcut_cover'] = (df['stok'] + df['yol']) / df['gunluk_satis'].replace(0, 0.01)
+        
+        # 5. İHTİYAÇ HESAPLA
+        forward_cover = float(forward_cover) if forward_cover else 7.0
+        df['hedef_stok'] = df['gunluk_satis'] * forward_cover
+        df['ihtiyac'] = (df['hedef_stok'] - df['stok'] - df['yol']).clip(lower=0)
+        
+        print(f"   İhtiyaç hesaplandı: {(df['ihtiyac'] > 0).sum()} mağaza×ürün ihtiyaç var")
+        
+        # 6. DEPO STOK SÖZLÜĞÜ OLUŞTUR
+        depo_df = depo_stok.copy()
+        depo_df.columns = [c.lower().strip() for c in depo_df.columns]
+        depo_df['urun_kod'] = depo_df['urun_kod'].astype(str)
+        depo_df['depo_kod'] = pd.to_numeric(depo_df['depo_kod'], errors='coerce').fillna(9001).astype(int)
+        depo_df['stok'] = pd.to_numeric(depo_df['stok'], errors='coerce').fillna(0)
+        
+        depo_stok_dict = {}
+        for _, row in depo_df.iterrows():
+            key = (int(row['depo_kod']), str(row['urun_kod']))
+            depo_stok_dict[key] = depo_stok_dict.get(key, 0) + float(row['stok'])
+        
+        print(f"   Depo stok dict: {len(depo_stok_dict)} ürün×depo kombinasyonu")
+        
+        # 7. SEVKİYAT DAĞIT
+        ihtiyac_df = df[df['ihtiyac'] > 0].copy()
+        ihtiyac_df = ihtiyac_df.sort_values('ihtiyac', ascending=False)
+        
+        sevkiyat_list = []
+        for _, row in ihtiyac_df.iterrows():
+            key = (int(row['depo_kod']), str(row['urun_kod']))
+            ihtiyac = float(row['ihtiyac'])
             
-    except Exception as e:
-        import traceback
-        return f"❌ Sevkiyat motoru hatası: {str(e)}\n\nDetay: {traceback.format_exc()[:500]}"
-    
-    # Rapor oluştur
-    rapor = []
-    
-    # Başlık
-    filtre_text = ""
-    if kategori_kod:
-        kat_adi = {11: "Renkli Kozmetik", 14: "Saç Bakım", 16: "Cilt Bakım", 19: "Parfüm", 20: "Kişisel Bakım"}.get(kategori_kod, str(kategori_kod))
-        filtre_text = f" ({kat_adi})"
-    if marka_kod:
-        filtre_text += f" - Marka: {marka_kod}"
-    
-    rapor.append(f"=== SEVKİYAT HESAPLAMA SONUCU{filtre_text} ===\n")
-    
-    # Özet metrikler
-    rapor.append("📊 ÖZET METRİKLER:")
-    rapor.append(f"   Toplam Sevkiyat: {ozet['toplam_sevkiyat']:,} adet")
-    rapor.append(f"   Toplam İhtiyaç: {ozet['toplam_ihtiyac']:,} adet")
-    rapor.append(f"   Karşılama Oranı: %{ozet['karsilama_orani']}")
-    rapor.append(f"   Karşılanamayan: {ozet['karsilanamayan_toplam']:,} adet")
-    rapor.append(f"   Ürün Sayısı: {ozet['urun_sayisi']}")
-    rapor.append(f"   Mağaza Sayısı: {ozet['magaza_sayisi']}")
-    rapor.append("")
-    
-    # Değerlendirme
-    if ozet['karsilama_orani'] >= 90:
-        rapor.append("✅ DURUM: İyi - Depo stoku ihtiyaçların çoğunu karşılıyor.")
-    elif ozet['karsilama_orani'] >= 70:
-        rapor.append("⚠️ DURUM: Orta - Bazı ürünlerde depo stok yetersizliği var.")
-    else:
-        rapor.append("🚨 DURUM: Kritik - Depo stok yetersizliği ciddi boyutta. Satınalma gerekli.")
-    rapor.append("")
-    
-    # En çok sevkiyat alan ürünler
-    rapor.append("🏆 EN ÇOK SEVKİYAT ALAN ÜRÜNLER (Top 10):")
-    top_urunler = df.groupby('urun_kod')['sevkiyat_miktari'].sum().nlargest(10)
-    for i, (urun, miktar) in enumerate(top_urunler.items(), 1):
-        rapor.append(f"   {i}. {urun}: {int(miktar):,} adet")
-    rapor.append("")
-    
-    # En çok sevkiyat alan mağazalar
-    rapor.append("🏪 EN ÇOK SEVKİYAT ALAN MAĞAZALAR (Top 10):")
-    top_magazalar = df.groupby('magaza_kod')['sevkiyat_miktari'].sum().nlargest(10)
-    for i, (magaza, miktar) in enumerate(top_magazalar.items(), 1):
-        rapor.append(f"   {i}. Mağaza {magaza}: {int(miktar):,} adet")
-    rapor.append("")
-    
-    # Depo bazında özet
-    if 'depo_kod' in df.columns:
+            mevcut = depo_stok_dict.get(key, 0)
+            if mevcut > 0:
+                sevk = min(ihtiyac, mevcut)
+                depo_stok_dict[key] -= sevk
+            else:
+                sevk = 0
+            
+            sevkiyat_list.append({
+                'magaza_kod': row['magaza_kod'],
+                'urun_kod': row['urun_kod'],
+                'depo_kod': row['depo_kod'],
+                'mevcut_stok': row['stok'],
+                'yoldaki': row['yol'],
+                'gunluk_satis': round(row['gunluk_satis'], 1),
+                'ihtiyac': int(ihtiyac),
+                'sevkiyat': int(sevk),
+                'karsilanamayan': int(ihtiyac - sevk)
+            })
+        
+        if not sevkiyat_list:
+            return "ℹ️ Sevkiyat ihtiyacı bulunamadı. Tüm mağazaların stoku yeterli."
+        
+        sonuc_df = pd.DataFrame(sevkiyat_list)
+        
+        # 8. ÖZET OLUŞTUR
+        toplam_ihtiyac = sonuc_df['ihtiyac'].sum()
+        toplam_sevkiyat = sonuc_df['sevkiyat'].sum()
+        karsilanamayan = sonuc_df['karsilanamayan'].sum()
+        karsilama_orani = (toplam_sevkiyat / toplam_ihtiyac * 100) if toplam_ihtiyac > 0 else 0
+        
+        print(f"✅ Hesaplama tamamlandı: {len(sonuc_df)} satır, {toplam_sevkiyat:,} adet sevkiyat")
+        
+        # 9. RAPOR OLUŞTUR
+        rapor = []
+        
+        # Filtre bilgisi
+        filtre_text = ""
+        if urun_kod:
+            filtre_text = f" (Ürün: {urun_kod})"
+        elif kategori_kod:
+            kat_adi = {11: "Renkli Kozmetik", 14: "Saç Bakım", 16: "Cilt Bakım", 19: "Parfüm", 20: "Kişisel Bakım"}.get(kategori_kod, str(kategori_kod))
+            filtre_text = f" ({kat_adi})"
+        
+        rapor.append(f"=== SEVKİYAT HESAPLAMA SONUCU{filtre_text} ===\n")
+        
+        rapor.append("📊 ÖZET:")
+        rapor.append(f"   Toplam İhtiyaç: {toplam_ihtiyac:,} adet")
+        rapor.append(f"   Toplam Sevkiyat: {toplam_sevkiyat:,} adet")
+        rapor.append(f"   Karşılama Oranı: %{karsilama_orani:.1f}")
+        rapor.append(f"   Karşılanamayan: {karsilanamayan:,} adet")
+        rapor.append(f"   Mağaza Sayısı: {sonuc_df['magaza_kod'].nunique()}")
+        if not urun_kod:
+            rapor.append(f"   Ürün Sayısı: {sonuc_df['urun_kod'].nunique()}")
+        rapor.append("")
+        
+        # Durum değerlendirmesi
+        if karsilama_orani >= 90:
+            rapor.append("✅ DURUM: İyi - Depo stoku ihtiyaçların çoğunu karşılıyor.")
+        elif karsilama_orani >= 70:
+            rapor.append("⚠️ DURUM: Orta - Bazı mağazalarda stok yetersizliği var.")
+        else:
+            rapor.append("🚨 DURUM: Kritik - Depo stok yetersiz, satınalma gerekli.")
+        rapor.append("")
+        
+        # En çok sevkiyat alan mağazalar
+        rapor.append("🏪 EN ÇOK SEVKİYAT GEREKEN MAĞAZALAR (Top 10):")
+        top_mag = sonuc_df.groupby('magaza_kod')['sevkiyat'].sum().nlargest(10)
+        for i, (mag, miktar) in enumerate(top_mag.items(), 1):
+            rapor.append(f"   {i}. Mağaza {mag}: {int(miktar):,} adet")
+        rapor.append("")
+        
+        # Tek ürün değilse, en çok sevkiyat alan ürünler
+        if not urun_kod:
+            rapor.append("🏆 EN ÇOK SEVKİYAT GEREKEN ÜRÜNLER (Top 10):")
+            top_urun = sonuc_df.groupby('urun_kod')['sevkiyat'].sum().nlargest(10)
+            for i, (urun, miktar) in enumerate(top_urun.items(), 1):
+                rapor.append(f"   {i}. {urun}: {int(miktar):,} adet")
+            rapor.append("")
+        
+        # Depo bazında dağılım
         rapor.append("🏭 DEPO BAZINDA DAĞILIM:")
-        depo_ozet = df.groupby('depo_kod')['sevkiyat_miktari'].sum().sort_values(ascending=False)
+        depo_ozet = sonuc_df.groupby('depo_kod')['sevkiyat'].sum().sort_values(ascending=False)
         for depo, miktar in depo_ozet.items():
             rapor.append(f"   Depo {depo}: {int(miktar):,} adet")
         rapor.append("")
-    
-    # Karşılanamayan ihtiyaçlar
-    if ozet['karsilanamayan_toplam'] > 0:
-        rapor.append("⚠️ KARŞILANAMAYAN İHTİYAÇLAR (Satınalma Gerekli):")
-        karsilanamayan = df[df['karsilanamayan'] > 0].groupby('urun_kod')['karsilanamayan'].sum().nlargest(10)
-        for urun, miktar in karsilanamayan.items():
-            rapor.append(f"   ❌ {urun}: {int(miktar):,} adet eksik")
-        rapor.append("")
-    
-    rapor.append(f"📋 Toplam {len(df):,} mağaza×ürün kombinasyonu için sevkiyat hesaplandı.")
-    
-    return "\n".join(rapor)
+        
+        # Karşılanamayan varsa
+        if karsilanamayan > 0:
+            rapor.append("⚠️ KARŞILANAMAYAN (Satınalma Gerekli):")
+            kars_df = sonuc_df[sonuc_df['karsilanamayan'] > 0]
+            if urun_kod:
+                # Tek ürün - mağaza bazında göster
+                for _, row in kars_df.nlargest(10, 'karsilanamayan').iterrows():
+                    rapor.append(f"   Mağaza {row['magaza_kod']}: {int(row['karsilanamayan']):,} adet eksik")
+            else:
+                # Çoklu ürün - ürün bazında göster
+                kars_urun = kars_df.groupby('urun_kod')['karsilanamayan'].sum().nlargest(10)
+                for urun, miktar in kars_urun.items():
+                    rapor.append(f"   {urun}: {int(miktar):,} adet eksik")
+        
+        rapor.append(f"\n📋 Toplam {len(sonuc_df):,} mağaza×ürün için hesaplama yapıldı.")
+        
+        return "\n".join(rapor)
+        
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"❌ HATA: {e}")
+        print(error_detail[:500])
+        return f"❌ Sevkiyat hesaplama hatası: {str(e)}\n\nDetay:\n{error_detail[:300]}"
 
 
 # =============================================================================
