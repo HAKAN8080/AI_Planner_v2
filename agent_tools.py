@@ -31,95 +31,6 @@ class KupVeri:
         self._yukle()
         self._hazirla()
     
-    def _load_trading_with_hierarchy(self, filepath: str) -> pd.DataFrame:
-        """
-        Trading Excel dosyasını girinti (indent) bilgisiyle birlikte yükler.
-        
-        Hiyerarşi seviyeleri:
-        - Seviye 0: Kategori (RENKLİ KOZMETİK, PARFÜM, vb.)
-        - Seviye 1: Alt Kategori (GÖZ ÜRÜNLERİ, YÜZ ÜRÜNLERİ, vb.)
-        - Seviye 2: Mal Grubu (MASKARA, FAR, FONDOTEN, vb.)
-        """
-        from openpyxl import load_workbook
-        
-        # Workbook'u yükle
-        wb = load_workbook(filepath, data_only=True)
-        
-        # Sheet seç (mtd veya ilk sheet)
-        if 'mtd' in wb.sheetnames:
-            ws = wb['mtd']
-        else:
-            ws = wb.active
-        
-        # Tüm satırları oku
-        data = []
-        headers = []
-        indent_col_idx = 0  # İlk kolon (A) genellikle kategori adı
-        
-        for row_idx, row in enumerate(ws.iter_rows(min_row=1), start=1):
-            row_data = []
-            indent_level = 0
-            
-            for col_idx, cell in enumerate(row):
-                # Header satırı
-                if row_idx == 1:
-                    headers.append(cell.value if cell.value else f"Col_{col_idx}")
-                else:
-                    row_data.append(cell.value)
-                    
-                    # İlk kolondaki girinti seviyesini oku
-                    if col_idx == indent_col_idx and cell.alignment and cell.alignment.indent:
-                        indent_level = int(cell.alignment.indent)
-            
-            if row_idx > 1 and row_data:
-                row_data.append(indent_level)
-                data.append(row_data)
-        
-        # DataFrame oluştur
-        headers.append('_hierarchy_level')
-        df = pd.DataFrame(data, columns=headers)
-        
-        # Hiyerarşi seviyesine göre tip belirle
-        def get_hierarchy_type(level):
-            if level == 0:
-                return 'Kategori'
-            elif level == 1:
-                return 'Alt Kategori'
-            else:
-                return 'Mal Grubu'
-        
-        df['_hierarchy_type'] = df['_hierarchy_level'].apply(get_hierarchy_type)
-        
-        # Parent kolonları ekle (Kategori ve Alt Kategori)
-        df['_kategori'] = None
-        df['_alt_kategori'] = None
-        
-        current_kategori = None
-        current_alt_kategori = None
-        
-        # İlk kolon adı (kategori ismi kolonu)
-        first_col = df.columns[0]
-        
-        for idx, row in df.iterrows():
-            level = row['_hierarchy_level']
-            name = row[first_col]
-            
-            if level == 0:
-                current_kategori = name
-                current_alt_kategori = None
-            elif level == 1:
-                current_alt_kategori = name
-            
-            df.at[idx, '_kategori'] = current_kategori
-            df.at[idx, '_alt_kategori'] = current_alt_kategori
-        
-        print(f"✅ Trading hiyerarşi yüklendi:")
-        print(f"   - Toplam satır: {len(df)}")
-        print(f"   - Kategoriler: {df[df['_hierarchy_level'] == 0][first_col].tolist()[:5]}...")
-        print(f"   - Seviye dağılımı: {df['_hierarchy_type'].value_counts().to_dict()}")
-        
-        return df
-    
     def _yukle(self):
         """Tüm veri dosyalarını yükle"""
         
@@ -183,21 +94,17 @@ class KupVeri:
             self.kpi = pd.DataFrame()
         
         # =====================================================================
-        # 3. TRADING RAPORU (Excel - Girinti ile Hiyerarşi)
+        # 3. TRADING RAPORU (Excel)
         # =====================================================================
         trading_path = os.path.join(self.veri_klasoru, "trading.xlsx")
         if os.path.exists(trading_path):
             try:
-                self.trading = self._load_trading_with_hierarchy(trading_path)
-            except Exception as e:
-                print(f"⚠️ Trading hiyerarşi okunamadı: {e}, normal okuma deneniyor...")
+                self.trading = pd.read_excel(trading_path, sheet_name='mtd')
+            except:
                 try:
-                    self.trading = pd.read_excel(trading_path, sheet_name='mtd')
+                    self.trading = pd.read_excel(trading_path, sheet_name=0)
                 except:
-                    try:
-                        self.trading = pd.read_excel(trading_path, sheet_name=0)
-                    except:
-                        self.trading = pd.DataFrame()
+                    self.trading = pd.DataFrame()
         else:
             self.trading = pd.DataFrame()
         
@@ -413,18 +320,16 @@ class KupVeri:
 
 def trading_analiz(kup: KupVeri) -> str:
     """
-    Trading raporu analizi - Hiyerarşik Yapı Destekli
+    Trading raporu analizi - Basit versiyon
     
-    Hiyerarşi:
-    - Seviye 0: Kategori (RENKLİ KOZMETİK, PARFÜM)
-    - Seviye 1: Alt Kategori (GÖZ ÜRÜNLERİ, YÜZ ÜRÜNLERİ)
-    - Seviye 2: Mal Grubu (MASKARA, FAR, FONDOTEN)
+    NOT: Trading.xlsx'te sadece 1. seviye (ana kategori) verisi olmalı.
+    Alt kategoriler ve mal grupları ayrı dosyada tutulacak.
     
     Analiz Sırası:
     1. Şirket Toplamı
-    2. Kategori Bazlı Performans (sadece ana kategoriler)
-    3. Kritik Alt Kategoriler
-    4. Top 10 Ürün + Depo Stok
+    2. Kategori Bazlı Performans
+    3. Top 10 Ürün + Depo Stok
+    4. Kritik Durumlar
     """
     
     if len(kup.trading) == 0:
@@ -436,10 +341,6 @@ def trading_analiz(kup: KupVeri) -> str:
     # Kolon isimlerini bul
     kolonlar = list(df.columns)
     print(f"Trading kolonları: {kolonlar[:15]}")
-    
-    # Hiyerarşi var mı kontrol et
-    has_hierarchy = '_hierarchy_level' in df.columns
-    print(f"Hiyerarşi mevcut: {has_hierarchy}")
     
     # Kategori kolonu bul (ilk kolon genellikle)
     kategori_kol = df.columns[0]
@@ -492,11 +393,8 @@ def trading_analiz(kup: KupVeri) -> str:
         except:
             return None
     
-    # Tüm satırları işle - hiyerarşi bilgisiyle
-    tum_satirlar = []
-    ana_kategoriler = []  # Sadece seviye 0
-    alt_kategoriler = []  # Sadece seviye 1
-    mal_gruplari = []     # Sadece seviye 2
+    # Tüm kategorileri topla
+    kategoriler = []
     toplam_ciro = 0
     
     for _, row in df.iterrows():
@@ -549,13 +447,9 @@ def trading_analiz(kup: KupVeri) -> str:
             lfl_kar = lfl_kar * 100
         
         ciro = parse_val(row.get(col_ciro, 0)) or 0
+        toplam_ciro += ciro
         
-        # Hiyerarşi bilgisini al
-        hierarchy_level = int(row.get('_hierarchy_level', 0)) if has_hierarchy else 0
-        parent_kategori = row.get('_kategori', None) if has_hierarchy else None
-        parent_alt_kat = row.get('_alt_kategori', None) if has_hierarchy else None
-        
-        satir_data = {
+        kategoriler.append({
             'ad': kategori,
             'ciro': ciro,
             'ciro_achieved': ciro_achieved,
@@ -567,39 +461,20 @@ def trading_analiz(kup: KupVeri) -> str:
             'lfl_adet': lfl_adet,
             'lfl_stok': lfl_stok,
             'lfl_kar': lfl_kar,
-            'fiyat_artis': fiyat_artis,
-            'hierarchy_level': hierarchy_level,
-            'parent_kategori': parent_kategori,
-            'parent_alt_kat': parent_alt_kat
-        }
-        
-        tum_satirlar.append(satir_data)
-        
-        # Hiyerarşiye göre ayır
-        if hierarchy_level == 0:
-            ana_kategoriler.append(satir_data)
-            toplam_ciro += ciro  # Sadece ana kategorilerin cirosunu topla
-        elif hierarchy_level == 1:
-            alt_kategoriler.append(satir_data)
-        else:
-            mal_gruplari.append(satir_data)
+            'fiyat_artis': fiyat_artis
+        })
     
-    # Hiyerarşi yoksa, tüm satırları ana kategori olarak kabul et
-    if not has_hierarchy or len(ana_kategoriler) == 0:
-        ana_kategoriler = tum_satirlar
-        toplam_ciro = sum(k['ciro'] for k in ana_kategoriler)
-    
-    if not ana_kategoriler:
+    if not kategoriler:
         return "❌ Analiz edilecek kategori bulunamadı."
     
-    # Ciro payı hesapla (ana kategoriler için)
-    for kat in ana_kategoriler:
+    # Ciro payı hesapla
+    for kat in kategoriler:
         kat['ciro_pay'] = (kat['ciro'] / toplam_ciro * 100) if toplam_ciro > 0 else 0
     
     # Ciroya göre sırala
-    ana_kategoriler.sort(key=lambda x: x['ciro'], reverse=True)
+    kategoriler.sort(key=lambda x: x['ciro'], reverse=True)
     
-    print(f"Hiyerarşi özeti: {len(ana_kategoriler)} ana kategori, {len(alt_kategoriler)} alt kategori, {len(mal_gruplari)} mal grubu")
+    print(f"Hiyerarşi özeti: {len(kategoriler)} ana kategori, {len(alt_kategoriler)} alt kategori, {len(mal_gruplari)} mal grubu")
     
     # ========================================
     # 1. ŞİRKET TOPLAMI
@@ -610,16 +485,16 @@ def trading_analiz(kup: KupVeri) -> str:
     
     # Ağırlıklı ortalama hesapla (ana kategorilerden)
     if toplam_ciro > 0:
-        avg_achieved = sum(k['ciro_achieved'] * k['ciro'] for k in ana_kategoriler) / toplam_ciro
-        avg_ty_cover = sum(k['ty_cover'] * k['ciro'] for k in ana_kategoriler) / toplam_ciro
-        avg_ly_cover = sum(k['ly_cover'] * k['ciro'] for k in ana_kategoriler) / toplam_ciro
-        avg_ty_marj = sum(k['ty_marj'] * k['ciro'] for k in ana_kategoriler) / toplam_ciro
-        avg_ly_marj = sum(k['ly_marj'] * k['ciro'] for k in ana_kategoriler) / toplam_ciro
-        avg_lfl_ciro = sum(k['lfl_ciro'] * k['ciro'] for k in ana_kategoriler) / toplam_ciro
-        avg_lfl_adet = sum(k['lfl_adet'] * k['ciro'] for k in ana_kategoriler) / toplam_ciro
-        avg_lfl_stok = sum(k['lfl_stok'] * k['ciro'] for k in ana_kategoriler) / toplam_ciro
-        avg_lfl_kar = sum(k['lfl_kar'] * k['ciro'] for k in ana_kategoriler) / toplam_ciro
-        avg_fiyat = sum(k['fiyat_artis'] * k['ciro'] for k in ana_kategoriler) / toplam_ciro
+        avg_achieved = sum(k['ciro_achieved'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_ty_cover = sum(k['ty_cover'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_ly_cover = sum(k['ly_cover'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_ty_marj = sum(k['ty_marj'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_ly_marj = sum(k['ly_marj'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_lfl_ciro = sum(k['lfl_ciro'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_lfl_adet = sum(k['lfl_adet'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_lfl_stok = sum(k['lfl_stok'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_lfl_kar = sum(k['lfl_kar'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_fiyat = sum(k['fiyat_artis'] * k['ciro'] for k in kategoriler) / toplam_ciro
     else:
         avg_achieved = avg_ty_cover = avg_ly_cover = avg_ty_marj = avg_ly_marj = 0
         avg_lfl_ciro = avg_lfl_adet = avg_lfl_stok = avg_lfl_kar = avg_fiyat = 0
@@ -695,12 +570,12 @@ def trading_analiz(kup: KupVeri) -> str:
     sonuc.append("=" * 55 + "\n")
     
     # İlk 3 kategorinin payı
-    top3_ciro = sum(k['ciro'] for k in ana_kategoriler[:3])
+    top3_ciro = sum(k['ciro'] for k in kategoriler[:3])
     top3_pay = (top3_ciro / toplam_ciro * 100) if toplam_ciro > 0 else 0
     
     sonuc.append(f"İlk 3 kategori toplam cironun %{top3_pay:.0f}'ini oluşturuyor:\n")
     
-    for i, kat in enumerate(ana_kategoriler[:3], 1):
+    for i, kat in enumerate(kategoriler[:3], 1):
         cover_durum = "🔴 yüksek" if kat['ty_cover'] > 12 else ("⚠️" if kat['ty_cover'] > 10 else "")
         marj_trend = f"(GY: %{kat['ly_marj']:.0f})" if kat['ly_marj'] > 0 else ""
         
@@ -788,10 +663,10 @@ def trading_analiz(kup: KupVeri) -> str:
     sonuc.append("=" * 55 + "\n")
     
     # Ana kategorilerdeki kritik durumlar
-    kritik_butce = [k for k in ana_kategoriler if k['ciro_achieved'] < -15]
-    kritik_cover = [k for k in ana_kategoriler if k['ty_cover'] > 12]
-    kritik_lfl = [k for k in ana_kategoriler if k['lfl_ciro'] < -20]
-    kritik_marj = [k for k in ana_kategoriler if k['ty_marj'] < k['ly_marj'] - 3]
+    kritik_butce = [k for k in kategoriler if k['ciro_achieved'] < -15]
+    kritik_cover = [k for k in kategoriler if k['ty_cover'] > 12]
+    kritik_lfl = [k for k in kategoriler if k['lfl_ciro'] < -20]
+    kritik_marj = [k for k in kategoriler if k['ty_marj'] < k['ly_marj'] - 3]
     
     if kritik_butce:
         sonuc.append(f"🔴 BÜTÇE ALTINDA ({len(kritik_butce)} kategori - sapma >%15):")
@@ -824,7 +699,7 @@ def trading_analiz(kup: KupVeri) -> str:
     # ========================================
     # 5. İYİ GİDEN KATEGORİLER
     # ========================================
-    iyi_gidenler = [k for k in ana_kategoriler if k['ciro_achieved'] >= 0 and k['lfl_ciro'] >= 0]
+    iyi_gidenler = [k for k in kategoriler if k['ciro_achieved'] >= 0 and k['lfl_ciro'] >= 0]
     if iyi_gidenler:
         sonuc.append("✅ İYİ PERFORMANS GÖSTEREN KATEGORİLER:")
         for kat in sorted(iyi_gidenler, key=lambda x: x['ciro_achieved'], reverse=True)[:3]:
