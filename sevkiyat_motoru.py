@@ -150,6 +150,7 @@ class SevkiyatMotoru:
     def _veri_hazirla(self, kategori_kod: Optional[int], urun_kod: Optional[str], marka_kod: Optional[str]) -> pd.DataFrame:
         """Ana veriyi hazırla ve filtrele"""
         df = self._get_stok_satis().copy()
+        print(f"   [Motor] Başlangıç df kolonları: {list(df.columns)}")
         df['urun_kod'] = df['urun_kod'].astype(str)
         df['magaza_kod'] = df['magaza_kod'].astype(str)
         
@@ -178,30 +179,50 @@ class SevkiyatMotoru:
             if 'mg' in urun_m.columns:
                 urun_cols.append('mg')
             
+            # Zaten varsa çıkar (duplicate column hatası önleme)
+            existing_cols = [c for c in urun_cols if c in df.columns and c != 'urun_kod']
+            if existing_cols:
+                print(f"   [Motor] Zaten var olan kolonlar çıkarılıyor: {existing_cols}")
+                df = df.drop(columns=existing_cols, errors='ignore')
+            
             df = df.merge(urun_m[urun_cols], on='urun_kod', how='left')
+            print(f"   [Motor] Ürün master join sonrası: {len(df)} satır")
             
             # Kategori filtresi
             if kategori_kod is not None and 'kategori_kod' in df.columns:
                 df['kategori_kod'] = pd.to_numeric(df['kategori_kod'], errors='coerce').fillna(0).astype(int)
                 df = df[df['kategori_kod'] == int(kategori_kod)]
+                print(f"   [Motor] Kategori filtresi sonrası: {len(df)} satır")
             
             # Marka filtresi
             if marka_kod is not None and 'marka_kod' in df.columns:
                 df = df[df['marka_kod'] == str(marka_kod)]
         
+        # depo_kod zaten df'de var mı kontrol et
+        if 'depo_kod' in df.columns:
+            print(f"   [Motor] depo_kod zaten mevcut, değerler: {df['depo_kod'].unique()[:5]}")
+            df['depo_kod'] = pd.to_numeric(df['depo_kod'], errors='coerce').fillna(1).astype(int)
         # Mağaza master varsa depo kodunu ekle
-        if self.kup.magaza_master is not None and len(self.kup.magaza_master) > 0:
+        elif self.kup.magaza_master is not None and len(self.kup.magaza_master) > 0:
             mag_m = self.kup.magaza_master.copy()
             mag_m['magaza_kod'] = mag_m['magaza_kod'].astype(str)
+            print(f"   [Motor] Mağaza master kolonları: {list(mag_m.columns)}")
             
             if 'depo_kod' in mag_m.columns:
+                # Zaten varsa çıkar
+                if 'depo_kod' in df.columns:
+                    df = df.drop(columns=['depo_kod'], errors='ignore')
                 df = df.merge(mag_m[['magaza_kod', 'depo_kod']], on='magaza_kod', how='left')
                 df['depo_kod'] = df['depo_kod'].fillna(1).astype(int)
+                print(f"   [Motor] Mağaza master join sonrası depo_kod eklendi")
             else:
                 df['depo_kod'] = 1
+                print(f"   [Motor] Mağaza master'da depo_kod yok, default 1")
         else:
             df['depo_kod'] = 1
+            print(f"   [Motor] Mağaza master yok, default depo_kod=1")
         
+        print(f"   [Motor] Final kolonlar: {list(df.columns)}")
         return df
     
     def _segmentasyon_uygula(self, df: pd.DataFrame) -> pd.DataFrame:
