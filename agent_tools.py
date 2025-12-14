@@ -1226,7 +1226,13 @@ def bolge_karsilastir(kup: KupVeri) -> str:
 
 def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, marka_kod: str = None, forward_cover: float = 7.0) -> str:
     """
-    Sevkiyat hesaplaması - INLINE versiyon (ayrı modül yok)
+    Sevkiyat hesaplaması - INLINE versiyon
+    
+    Mantık:
+    1. hedef_stok = haftalik_satis × forward_cover
+    2. rpt_ihtiyac = hedef_stok - stok - yol
+    3. min_ihtiyac = min - stok - yol (eğer stok+yol < min ise)
+    4. final_ihtiyac = MAX(rpt_ihtiyac, min_ihtiyac)
     """
     print("\n" + "="*50)
     print("🚀 SEVKIYAT_HESAPLA ÇAĞRILDI (INLINE)")
@@ -1250,7 +1256,7 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, ma
         df = stok_satis.copy()
         df['urun_kod'] = df['urun_kod'].astype(str)
         df['magaza_kod'] = df['magaza_kod'].astype(str)
-        print(f"   Başlangıç: {len(df)} satır, kolonlar: {list(df.columns)[:10]}...")
+        print(f"   Başlangıç: {len(df)} satır")
         
         # Ürün filtresi
         if urun_kod is not None:
@@ -1271,7 +1277,7 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, ma
         if len(df) == 0:
             return "❌ Filtrelere uygun veri bulunamadı."
         
-        # 3. DEPO KODU EKLE (stok_satis'te varsa kullan, yoksa mağaza master'dan al)
+        # 3. DEPO KODU EKLE
         if 'depo_kod' not in df.columns:
             mag_m = getattr(kup, 'magaza_master', None)
             if mag_m is not None and 'depo_kod' in mag_m.columns:
@@ -1279,30 +1285,60 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, ma
                 mag_m['magaza_kod'] = mag_m['magaza_kod'].astype(str)
                 df = df.merge(mag_m[['magaza_kod', 'depo_kod']], on='magaza_kod', how='left')
                 df['depo_kod'] = pd.to_numeric(df['depo_kod'], errors='coerce').fillna(9001).astype(int)
-                print(f"   Mağaza master'dan depo_kod eklendi")
             else:
                 df['depo_kod'] = 9001
-                print(f"   Default depo_kod=9001 kullanıldı")
         else:
             df['depo_kod'] = pd.to_numeric(df['depo_kod'], errors='coerce').fillna(9001).astype(int)
-            print(f"   depo_kod zaten var: {df['depo_kod'].unique()[:5]}")
         
-        # 4. SATIŞ VE COVER HESAPLA
-        df['satis'] = pd.to_numeric(df['satis'], errors='coerce').fillna(0)
+        print(f"   Depo kodları: {df['depo_kod'].unique().tolist()}")
+        
+        # 4. SAYISAL KOLONLARI HAZIRLA
+        df['haftalik_satis'] = pd.to_numeric(df['satis'], errors='coerce').fillna(0)
         df['stok'] = pd.to_numeric(df['stok'], errors='coerce').fillna(0)
         df['yol'] = pd.to_numeric(df.get('yol', 0), errors='coerce').fillna(0)
         
-        df['gunluk_satis'] = df['satis'] / 7  # Haftalık satışı günlüğe çevir
-        df['mevcut_cover'] = (df['stok'] + df['yol']) / df['gunluk_satis'].replace(0, 0.01)
+        # Min değeri - KPI'dan geliyorsa kullan, yoksa default
+        if 'min_deger' in df.columns:
+            df['min'] = pd.to_numeric(df['min_deger'], errors='coerce').fillna(0)
+        else:
+            # Default min = 1 haftalık satış
+            df['min'] = df['haftalik_satis'] * 1
         
-        # 5. İHTİYAÇ HESAPLA
+        # 5. COVER HESAPLA
+        df['mevcut'] = df['stok'] + df['yol']
+        df['cover'] = df['mevcut'] / df['haftalik_satis'].replace(0, 0.001)
+        
+        # 6. İHTİYAÇ HESAPLA
         forward_cover = float(forward_cover) if forward_cover else 7.0
-        df['hedef_stok'] = df['gunluk_satis'] * forward_cover
-        df['ihtiyac'] = (df['hedef_stok'] - df['stok'] - df['yol']).clip(lower=0)
         
-        print(f"   İhtiyaç hesaplandı: {(df['ihtiyac'] > 0).sum()} mağaza×ürün ihtiyaç var")
+        # Hedef stok = haftalık satış × forward cover
+        df['hedef_stok'] = df['haftalik_satis'] * forward_cover
         
-        # 6. DEPO STOK SÖZLÜĞÜ OLUŞTUR
+        # RPT ihtiyaç = hedef - stok - yol
+        df['rpt_ihtiyac'] = (df['hedef_stok'] - df['stok'] - df['yol']).clip(lower=0)
+        
+        # Min ihtiyaç = eğer stok+yol < min ise, min - stok - yol
+        df['min_ihtiyac'] = np.where(
+            df['mevcut'] < df['min'],
+            (df['min'] - df['stok'] - df['yol']).clip(lower=0),
+            0
+        )
+        
+        # Final ihtiyaç = MAX(RPT, Min)
+        df['ihtiyac'] = df[['rpt_ihtiyac', 'min_ihtiyac']].max(axis=1)
+        
+        # İhtiyaç türünü belirle
+        df['ihtiyac_turu'] = np.where(
+            df['ihtiyac'] == 0, 'Yok',
+            np.where(df['ihtiyac'] == df['min_ihtiyac'], 'MIN', 'RPT')
+        )
+        
+        print(f"   İhtiyaç hesaplandı:")
+        print(f"      - RPT ihtiyaç olan: {(df['rpt_ihtiyac'] > 0).sum()}")
+        print(f"      - MIN ihtiyaç olan: {(df['min_ihtiyac'] > 0).sum()}")
+        print(f"      - Toplam ihtiyaç olan: {(df['ihtiyac'] > 0).sum()}")
+        
+        # 7. DEPO STOK SÖZLÜĞÜ OLUŞTUR
         depo_df = depo_stok.copy()
         depo_df.columns = [c.lower().strip() for c in depo_df.columns]
         depo_df['urun_kod'] = depo_df['urun_kod'].astype(str)
@@ -1314,9 +1350,9 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, ma
             key = (int(row['depo_kod']), str(row['urun_kod']))
             depo_stok_dict[key] = depo_stok_dict.get(key, 0) + float(row['stok'])
         
-        print(f"   Depo stok dict: {len(depo_stok_dict)} ürün×depo kombinasyonu")
+        print(f"   Depo stok: {len(depo_stok_dict)} ürün×depo kombinasyonu")
         
-        # 7. SEVKİYAT DAĞIT
+        # 8. SEVKİYAT DAĞIT
         ihtiyac_df = df[df['ihtiyac'] > 0].copy()
         ihtiyac_df = ihtiyac_df.sort_values('ihtiyac', ascending=False)
         
@@ -1325,9 +1361,9 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, ma
             key = (int(row['depo_kod']), str(row['urun_kod']))
             ihtiyac = float(row['ihtiyac'])
             
-            mevcut = depo_stok_dict.get(key, 0)
-            if mevcut > 0:
-                sevk = min(ihtiyac, mevcut)
+            mevcut_depo = depo_stok_dict.get(key, 0)
+            if mevcut_depo > 0:
+                sevk = min(ihtiyac, mevcut_depo)
                 depo_stok_dict[key] -= sevk
             else:
                 sevk = 0
@@ -1336,10 +1372,14 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, ma
                 'magaza_kod': row['magaza_kod'],
                 'urun_kod': row['urun_kod'],
                 'depo_kod': row['depo_kod'],
-                'mevcut_stok': row['stok'],
-                'yoldaki': row['yol'],
-                'gunluk_satis': round(row['gunluk_satis'], 1),
+                'stok': int(row['stok']),
+                'yol': int(row['yol']),
+                'min': int(row['min']),
+                'haftalik_satis': round(row['haftalik_satis'], 1),
+                'cover': round(row['cover'], 1),
+                'hedef_stok': int(row['hedef_stok']),
                 'ihtiyac': int(ihtiyac),
+                'ihtiyac_turu': row['ihtiyac_turu'],
                 'sevkiyat': int(sevk),
                 'karsilanamayan': int(ihtiyac - sevk)
             })
@@ -1349,15 +1389,18 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, ma
         
         sonuc_df = pd.DataFrame(sevkiyat_list)
         
-        # 8. ÖZET OLUŞTUR
+        # 9. ÖZET OLUŞTUR
         toplam_ihtiyac = sonuc_df['ihtiyac'].sum()
         toplam_sevkiyat = sonuc_df['sevkiyat'].sum()
         karsilanamayan = sonuc_df['karsilanamayan'].sum()
         karsilama_orani = (toplam_sevkiyat / toplam_ihtiyac * 100) if toplam_ihtiyac > 0 else 0
         
-        print(f"✅ Hesaplama tamamlandı: {len(sonuc_df)} satır, {toplam_sevkiyat:,} adet sevkiyat")
+        rpt_count = (sonuc_df['ihtiyac_turu'] == 'RPT').sum()
+        min_count = (sonuc_df['ihtiyac_turu'] == 'MIN').sum()
         
-        # 9. RAPOR OLUŞTUR
+        print(f"✅ Hesaplama tamamlandı: {len(sonuc_df)} satır, {toplam_sevkiyat:,.0f} adet sevkiyat")
+        
+        # 10. RAPOR OLUŞTUR
         rapor = []
         
         # Filtre bilgisi
@@ -1368,16 +1411,22 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, ma
             kat_adi = {11: "Renkli Kozmetik", 14: "Saç Bakım", 16: "Cilt Bakım", 19: "Parfüm", 20: "Kişisel Bakım"}.get(kategori_kod, str(kategori_kod))
             filtre_text = f" ({kat_adi})"
         
-        rapor.append(f"=== SEVKİYAT HESAPLAMA SONUCU{filtre_text} ===\n")
+        rapor.append(f"=== SEVKİYAT HESAPLAMA SONUCU{filtre_text} ===")
+        rapor.append(f"Forward Cover: {forward_cover} hafta\n")
         
         rapor.append("📊 ÖZET:")
-        rapor.append(f"   Toplam İhtiyaç: {toplam_ihtiyac:,} adet")
-        rapor.append(f"   Toplam Sevkiyat: {toplam_sevkiyat:,} adet")
+        rapor.append(f"   Toplam İhtiyaç: {toplam_ihtiyac:,.0f} adet")
+        rapor.append(f"   Toplam Sevkiyat: {toplam_sevkiyat:,.0f} adet")
         rapor.append(f"   Karşılama Oranı: %{karsilama_orani:.1f}")
-        rapor.append(f"   Karşılanamayan: {karsilanamayan:,} adet")
+        rapor.append(f"   Karşılanamayan: {karsilanamayan:,.0f} adet")
         rapor.append(f"   Mağaza Sayısı: {sonuc_df['magaza_kod'].nunique()}")
         if not urun_kod:
             rapor.append(f"   Ürün Sayısı: {sonuc_df['urun_kod'].nunique()}")
+        rapor.append("")
+        
+        rapor.append("📋 İHTİYAÇ TÜRLERİ:")
+        rapor.append(f"   RPT (Replenishment): {rpt_count} mağaza×ürün")
+        rapor.append(f"   MIN (Minimum Altı): {min_count} mağaza×ürün")
         rapor.append("")
         
         # Durum değerlendirmesi
@@ -1389,14 +1438,14 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, ma
             rapor.append("🚨 DURUM: Kritik - Depo stok yetersiz, satınalma gerekli.")
         rapor.append("")
         
-        # En çok sevkiyat alan mağazalar
+        # En çok sevkiyat gereken mağazalar
         rapor.append("🏪 EN ÇOK SEVKİYAT GEREKEN MAĞAZALAR (Top 10):")
         top_mag = sonuc_df.groupby('magaza_kod')['sevkiyat'].sum().nlargest(10)
         for i, (mag, miktar) in enumerate(top_mag.items(), 1):
             rapor.append(f"   {i}. Mağaza {mag}: {int(miktar):,} adet")
         rapor.append("")
         
-        # Tek ürün değilse, en çok sevkiyat alan ürünler
+        # Tek ürün değilse, en çok sevkiyat gereken ürünler
         if not urun_kod:
             rapor.append("🏆 EN ÇOK SEVKİYAT GEREKEN ÜRÜNLER (Top 10):")
             top_urun = sonuc_df.groupby('urun_kod')['sevkiyat'].sum().nlargest(10)
@@ -1413,7 +1462,7 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, ma
         
         # Karşılanamayan varsa
         if karsilanamayan > 0:
-            rapor.append("⚠️ KARŞILANAMAYAN (Satınalma Gerekli):")
+            rapor.append("⚠️ KARŞILANAMAYAN - SATINALMA GEREKLİ:")
             kars_df = sonuc_df[sonuc_df['karsilanamayan'] > 0]
             if urun_kod:
                 # Tek ürün - mağaza bazında göster
