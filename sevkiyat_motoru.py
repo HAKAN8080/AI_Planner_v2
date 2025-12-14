@@ -90,7 +90,9 @@ class SevkiyatMotoru:
                 }
             
             # 2. VERİ HAZIRLA
+            print("   [Motor] Veri hazırlanıyor...")
             df = self._veri_hazirla(kategori_kod, marka_kod)
+            print(f"   [Motor] Veri hazır: {len(df)} satır")
             
             if len(df) == 0:
                 return {
@@ -100,16 +102,23 @@ class SevkiyatMotoru:
                 }
             
             # 3. SEGMENTASYON
+            print("   [Motor] Segmentasyon uygulanıyor...")
             df = self._segmentasyon_uygula(df)
+            print(f"   [Motor] Segmentasyon tamam, kolonlar: {list(df.columns)}")
             
             # 4. MATRİS DEĞERLERİ
+            print("   [Motor] Matris değerleri ekleniyor...")
             df = self._matris_degerleri_ekle(df, sisme_orani, genlestirme_orani, min_stok_orani)
             
             # 5. İHTİYAÇ HESAPLA
+            print("   [Motor] İhtiyaç hesaplanıyor...")
             df = self._ihtiyac_hesapla(df, forward_cover)
+            print(f"   [Motor] Pozitif ihtiyaç: {(df['ihtiyac'] > 0).sum()} satır")
             
             # 6. DEPO STOK DAĞIT
+            print("   [Motor] Depo stok dağıtılıyor...")
             sonuc = self._depo_stok_dagit(df)
+            print(f"   [Motor] Sevkiyat sonucu: {len(sonuc)} satır")
             
             # 7. ÖZET OLUŞTUR
             ozet = self._ozet_olustur(sonuc)
@@ -314,7 +323,18 @@ class SevkiyatMotoru:
         # Depo stok dictionary
         depo_df = self.kup.depo_stok.copy()
         depo_df['urun_kod'] = depo_df['urun_kod'].astype(str)
-        depo_df['depo_kod'] = depo_df['depo_kod'].astype(int)
+        
+        # depo_kod kontrolü - yoksa default 1
+        if 'depo_kod' in depo_df.columns:
+            depo_df['depo_kod'] = pd.to_numeric(depo_df['depo_kod'], errors='coerce').fillna(1).astype(int)
+        else:
+            depo_df['depo_kod'] = 1
+        
+        # result'ta da depo_kod kontrolü
+        if 'depo_kod' not in result.columns:
+            result['depo_kod'] = 1
+        else:
+            result['depo_kod'] = pd.to_numeric(result['depo_kod'], errors='coerce').fillna(1).astype(int)
         
         depo_stok_dict = {}
         for _, row in depo_df.iterrows():
