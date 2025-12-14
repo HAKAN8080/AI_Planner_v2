@@ -1232,13 +1232,14 @@ def bolge_karsilastir(kup: KupVeri) -> str:
     return "\n".join(sonuc)
 
 
-def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, marka_kod: str = None, forward_cover: float = 7.0) -> str:
+def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, marka_kod: str = None, forward_cover: float = 7.0) -> str:
     """
     R4U Allocator motorunu çalıştırarak sevkiyat hesaplaması yapar.
     
     Args:
         kup: KupVeri instance (stok_satis, urun_master, magaza_master, depo_stok, kpi)
         kategori_kod: Kategori filtresi (11=Renkli Kozmetik, vb.)
+        urun_kod: Tek ürün filtresi (opsiyonel)
         marka_kod: Marka filtresi
         forward_cover: Hedef cover değeri
     
@@ -1247,6 +1248,7 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, marka_kod: str = None, f
     """
     print("\n" + "="*50)
     print("🚀 SEVKIYAT_HESAPLA ÇAĞRILDI")
+    print(f"   Parametreler: kategori={kategori_kod}, urun={urun_kod}, marka={marka_kod}, fc={forward_cover}")
     print("="*50)
     
     # Global import kontrolü
@@ -1298,9 +1300,10 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, marka_kod: str = None, f
         print("✅ SevkiyatMotoru oluşturuldu")
         
         # Hesapla
-        print(f"🔧 Hesaplama başlıyor (kategori={kategori_kod}, fc={forward_cover})...")
+        print(f"🔧 Hesaplama başlıyor (kategori={kategori_kod}, urun={urun_kod}, fc={forward_cover})...")
         sonuc = motor.hesapla(
             kategori_kod=kategori_kod,
+            urun_kod=urun_kod,
             marka_kod=marka_kod,
             forward_cover=forward_cover
         )
@@ -1532,6 +1535,10 @@ TOOLS = [
                     "type": "integer",
                     "description": "Kategori filtresi. 11=Renkli Kozmetik, 14=Saç, 16=Cilt, 19=Parfüm, 20=Kişisel Bakım"
                 },
+                "urun_kod": {
+                    "type": "string",
+                    "description": "Tek bir ürün için sevkiyat hesaplamak istiyorsan ürün kodunu gir. Örn: '1017239'"
+                },
                 "marka_kod": {
                     "type": "string",
                     "description": "Marka filtresi (opsiyonel)"
@@ -1605,8 +1612,21 @@ Bu tarz robotik, rakam sıralayan cevaplar VERME!
 3. **Anlık Stok/Satış**: Mağaza × Ürün güncel durum
 4. **Sevkiyat Motoru**: sevkiyat_hesapla tool'u ile otomatik hesaplama
 
-## SEVKİYAT HESAPLAMA
-"Sevkiyat yap", "sevk planı", "dağıtım hesapla" denildiğinde → sevkiyat_hesapla tool'unu kullan
+## SEVKİYAT HESAPLAMA (ÇOK ÖNEMLİ!)
+Aşağıdaki durumlarda MUTLAKA sevkiyat_hesapla tool'unu çağır:
+- "Sevkiyat yap", "sevk planı", "dağıtım hesapla" denildiğinde
+- "X ürünü için sevkiyat" denildiğinde  
+- "X kategorisi için sevk" denildiğinde
+- Herhangi bir ürün veya kategori için sevkiyat isteklerinde
+
+⚠️ UYARI: Asla "sevkiyat hesaplıyorum" deyip hesaplamadan geçme!
+⚠️ UYARI: Asla "teknik sorun var" deme - tool'u çağır ve sonucunu göster!
+⚠️ UYARI: Tool hata verirse, hatayı kullanıcıya AÇIKÇA göster!
+
+Doğru kullanım:
+1. Kullanıcı "1017239 için sevkiyat hesapla" dedi
+2. sevkiyat_hesapla tool'unu çağır (kategori_kod veya urun_kod ile)
+3. Sonucu kullanıcıya göster
 
 ## ÇALIŞMA ŞEKLİN
 1. En uygun 1-2 tool çağır
@@ -1715,6 +1735,7 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
                     tool_result = sevkiyat_hesapla(
                         kup,
                         kategori_kod=tool_input.get("kategori_kod", None),
+                        urun_kod=tool_input.get("urun_kod", None),
                         marka_kod=tool_input.get("marka_kod", None),
                         forward_cover=tool_input.get("forward_cover", 7.0)
                     )
