@@ -332,13 +332,49 @@ class SevkiyatMotoru:
         
         # Depo stok dictionary
         depo_df = self.kup.depo_stok.copy()
-        depo_df['urun_kod'] = depo_df['urun_kod'].astype(str)
         
-        # depo_kod kontrolü - yoksa default 1
-        if 'depo_kod' in depo_df.columns:
-            depo_df['depo_kod'] = pd.to_numeric(depo_df['depo_kod'], errors='coerce').fillna(1).astype(int)
+        # Kolon adlarını küçük harfe çevir
+        depo_df.columns = [c.lower().strip() for c in depo_df.columns]
+        print(f"   [Motor] Depo stok kolonları: {list(depo_df.columns)}")
+        
+        # urun_kod kontrolü - farklı isimler olabilir
+        urun_col = None
+        for col in ['urun_kod', 'urun_kodu', 'urunkod', 'sku', 'product_code']:
+            if col in depo_df.columns:
+                urun_col = col
+                break
+        
+        if urun_col is None:
+            print(f"   ❌ [Motor] Depo stokta ürün kolonu bulunamadı!")
+            return pd.DataFrame()
+        
+        depo_df['urun_kod'] = depo_df[urun_col].astype(str)
+        
+        # depo_kod kontrolü - farklı isimler olabilir
+        depo_col = None
+        for col in ['depo_kod', 'depo_kodu', 'depokod', 'depo', 'warehouse']:
+            if col in depo_df.columns:
+                depo_col = col
+                break
+        
+        if depo_col is not None:
+            depo_df['depo_kod'] = pd.to_numeric(depo_df[depo_col], errors='coerce').fillna(1).astype(int)
         else:
+            print(f"   ⚠️ [Motor] Depo stokta depo_kod kolonu yok, default 1 kullanılıyor")
             depo_df['depo_kod'] = 1
+        
+        # stok kolonu kontrolü
+        stok_col = None
+        for col in ['stok', 'miktar', 'adet', 'quantity', 'stock']:
+            if col in depo_df.columns:
+                stok_col = col
+                break
+        
+        if stok_col is None:
+            print(f"   ❌ [Motor] Depo stokta stok kolonu bulunamadı!")
+            return pd.DataFrame()
+        
+        depo_df['stok'] = pd.to_numeric(depo_df[stok_col], errors='coerce').fillna(0)
         
         # result'ta da depo_kod kontrolü
         if 'depo_kod' not in result.columns:
@@ -350,6 +386,8 @@ class SevkiyatMotoru:
         for _, row in depo_df.iterrows():
             key = (int(row['depo_kod']), str(row['urun_kod']))
             depo_stok_dict[key] = float(row['stok'])
+        
+        print(f"   [Motor] Depo stok dict: {len(depo_stok_dict)} ürün×depo")
         
         # Sevkiyat hesapla
         sevkiyat_list = []
