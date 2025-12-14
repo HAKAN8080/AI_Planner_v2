@@ -373,7 +373,14 @@ def trading_analiz(kup: KupVeri) -> str:
     col_ciro = find_col(['ty', 'sales', 'value', 'try'], ['budget', 'achieved', 'lfl', 'gap'])
     col_indirim = find_col(['tw', 'indirim'], []) or find_col(['ty', 'discount'], [])
     
-    print(f"Bulunan kolonlar: ciro_achieved={col_ciro_achieved}, ty_marj={col_ty_marj}, ly_marj={col_ly_marj}")
+    # PAY KOLONLARI (Excel'de zaten % olarak var)
+    col_adet_pay = find_col(['ty', 'lfl', 'sales', 'unit'], ['tyvsly', 'price', 'cost', 'budget'])  # TY LFL Sales Unit
+    col_stok_pay = find_col(['ty', 'avg', 'store', 'stock', 'cost', 'lc'], ['tyvsly'])  # TY Avg Store Stock Cost LC
+    col_ciro_pay = find_col(['ty', 'lfl', 'sales', 'value', 'lc'], ['tyvsly'])  # TY LFL Sales Value LC
+    col_kar_pay = find_col(['ty', 'lfl', 'gross', 'profit', 'lc'], ['tyvsly'])  # TY LFL Gross Profit LC
+    
+    print(f"Bulunan kolonlar: ciro_achieved={col_ciro_achieved}, ty_marj={col_ty_marj}")
+    print(f"Pay kolonları: adet={col_adet_pay}, stok={col_stok_pay}, ciro={col_ciro_pay}, kar={col_kar_pay}")
     
     if col_ciro_achieved is None:
         return f"❌ 'Achieved TY Sales Budget Value TRY' kolonu bulunamadı.\nMevcut kolonlar: {kolonlar[:15]}"
@@ -449,6 +456,23 @@ def trading_analiz(kup: KupVeri) -> str:
         ciro = parse_val(row.get(col_ciro, 0)) or 0
         toplam_ciro += ciro
         
+        # Pay değerlerini al (Excel'de zaten % olarak var)
+        adet_pay = parse_val(row.get(col_adet_pay, 0)) or 0
+        if -2 < adet_pay < 2 and adet_pay != 0:
+            adet_pay = adet_pay * 100
+            
+        stok_pay = parse_val(row.get(col_stok_pay, 0)) or 0
+        if -2 < stok_pay < 2 and stok_pay != 0:
+            stok_pay = stok_pay * 100
+            
+        ciro_pay = parse_val(row.get(col_ciro_pay, 0)) or 0
+        if -2 < ciro_pay < 2 and ciro_pay != 0:
+            ciro_pay = ciro_pay * 100
+            
+        kar_pay = parse_val(row.get(col_kar_pay, 0)) or 0
+        if -2 < kar_pay < 2 and kar_pay != 0:
+            kar_pay = kar_pay * 100
+        
         kategoriler.append({
             'ad': kategori,
             'ciro': ciro,
@@ -461,16 +485,17 @@ def trading_analiz(kup: KupVeri) -> str:
             'lfl_adet': lfl_adet,
             'lfl_stok': lfl_stok,
             'lfl_kar': lfl_kar,
-            'fiyat_artis': fiyat_artis
+            'fiyat_artis': fiyat_artis,
+            'adet_pay': adet_pay,
+            'stok_pay': stok_pay,
+            'ciro_pay': ciro_pay,
+            'kar_pay': kar_pay
         })
     
     if not kategoriler:
         return "❌ Analiz edilecek kategori bulunamadı."
     
-    # Ciro payı hesapla
-    for kat in kategoriler:
-        kat['ciro_pay'] = (kat['ciro'] / toplam_ciro * 100) if toplam_ciro > 0 else 0
-    
+    # Ciroya göre sırala (ciro_pay zaten Excel'den geliyor)
     # Ciroya göre sırala
     kategoriler.sort(key=lambda x: x['ciro'], reverse=True)
     
@@ -563,33 +588,45 @@ def trading_analiz(kup: KupVeri) -> str:
     sonuc.append(f"   💰 Fiyat Artışı: %{avg_fiyat:+.1f}")
     
     # ========================================
-    # 2. KATEGORİ KONSANTRASYONU
+    # 2. KATEGORİ KONSANTRASYONU (4 PAY İLE)
     # ========================================
     sonuc.append("\n" + "=" * 55)
     sonuc.append("🏆 KATEGORİ KONSANTRASYONU")
     sonuc.append("=" * 55 + "\n")
     
-    # İlk 3 kategorinin payı
-    top3_ciro = sum(k['ciro'] for k in kategoriler[:3])
-    top3_pay = (top3_ciro / toplam_ciro * 100) if toplam_ciro > 0 else 0
+    # İlk 3 kategorinin toplam payları
+    top3_ciro_pay = sum(k['ciro_pay'] for k in kategoriler[:3])
+    top3_adet_pay = sum(k['adet_pay'] for k in kategoriler[:3])
+    top3_stok_pay = sum(k['stok_pay'] for k in kategoriler[:3])
+    top3_kar_pay = sum(k['kar_pay'] for k in kategoriler[:3])
     
-    sonuc.append(f"İlk 3 kategori toplam cironun %{top3_pay:.0f}'ini oluşturuyor:\n")
+    sonuc.append(f"İlk 3 kategorinin toplam payları:")
+    sonuc.append(f"   Ciro: %{top3_ciro_pay:.0f} | Adet: %{top3_adet_pay:.0f} | Stok: %{top3_stok_pay:.0f} | Kar: %{top3_kar_pay:.0f}\n")
     
-    for i, kat in enumerate(kategoriler[:3], 1):
-        cover_durum = "🔴 yüksek" if kat['ty_cover'] > 12 else ("⚠️" if kat['ty_cover'] > 10 else "")
-        marj_trend = f"(GY: %{kat['ly_marj']:.0f})" if kat['ly_marj'] > 0 else ""
+    # Tablo başlığı
+    sonuc.append(f"{'Kategori':<25} {'Ciro%':>7} {'Adet%':>7} {'Stok%':>7} {'Kar%':>7} {'Cover':>7} {'Bütçe':>7}")
+    sonuc.append("-" * 75)
+    
+    for kat in kategoriler[:8]:  # İlk 8 kategori
+        cover_str = f"{kat['ty_cover']:.1f}hf"
+        butce_str = f"%{kat['ciro_achieved']:+.0f}"
         
-        sonuc.append(f"{i}. {kat['ad']}")
-        sonuc.append(f"   📊 Ciro Payı: %{kat['ciro_pay']:.1f}")
-        sonuc.append(f"   📦 Cover: {kat['ty_cover']:.1f} hf (GY: {kat['ly_cover']:.1f}) {cover_durum}")
-        sonuc.append(f"   💰 Brüt Marj: %{kat['ty_marj']:.1f} {marj_trend}")
-        sonuc.append(f"   📈 Bütçe: %{kat['ciro_achieved']:+.0f} | LFL Ciro: %{kat['lfl_ciro']:+.1f}")
-        sonuc.append("")
+        sonuc.append(f"{kat['ad']:<25} {kat['ciro_pay']:>6.1f}% {kat['adet_pay']:>6.1f}% {kat['stok_pay']:>6.1f}% {kat['kar_pay']:>6.1f}% {cover_str:>7} {butce_str:>7}")
+    
+    # Stok/Ciro oranı yorumu
+    sonuc.append("")
+    for kat in kategoriler[:5]:
+        if kat['ciro_pay'] > 0:
+            stok_ciro_oran = kat['stok_pay'] / kat['ciro_pay']
+            if stok_ciro_oran > 1.3:
+                sonuc.append(f"   ⚠️ {kat['ad']}: Stok payı ciro payından %{(stok_ciro_oran-1)*100:.0f} fazla → ERİTME gerekli")
+            elif stok_ciro_oran < 0.7:
+                sonuc.append(f"   ⚠️ {kat['ad']}: Stok payı ciro payından %{(1-stok_ciro_oran)*100:.0f} az → SEVKİYAT gerekli")
     
     # ========================================
     # 3. TOP 10 ÜRÜN ANALİZİ
     # ========================================
-    sonuc.append("=" * 55)
+    sonuc.append("\n" + "=" * 55)
     sonuc.append("🔝 EN ÇOK SATAN 10 ÜRÜN + DEPO STOK DURUMU")
     sonuc.append("=" * 55 + "\n")
     
@@ -1398,7 +1435,7 @@ def bolge_karsilastir(kup: KupVeri) -> str:
     return "\n".join(sonuc)
 
 
-def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, marka_kod: str = None, forward_cover: float = 7.0) -> str:
+def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, marka_kod: str = None, forward_cover: float = 7.0, export_excel: bool = False) -> str:
     """
     Sevkiyat hesaplaması - INLINE versiyon
     
@@ -1407,10 +1444,12 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, ma
     2. rpt_ihtiyac = hedef_stok - stok - yol
     3. min_ihtiyac = min - stok - yol (eğer stok+yol < min ise)
     4. final_ihtiyac = MAX(rpt_ihtiyac, min_ihtiyac)
+    
+    export_excel=True ise Excel dosyası oluşturur ve yolunu döner
     """
     print("\n" + "="*50)
     print("🚀 SEVKIYAT_HESAPLA ÇAĞRILDI (INLINE)")
-    print(f"   Parametreler: kategori={kategori_kod}, urun={urun_kod}, fc={forward_cover}")
+    print(f"   Parametreler: kategori={kategori_kod}, urun={urun_kod}, fc={forward_cover}, excel={export_excel}")
     print("="*50)
     
     try:
@@ -1650,6 +1689,45 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, ma
         
         rapor.append(f"\n📋 Toplam {len(sonuc_df):,} mağaza×ürün için hesaplama yapıldı.")
         
+        # EXCEL EXPORT
+        if export_excel:
+            try:
+                import os
+                from datetime import datetime
+                
+                # Export için DataFrame hazırla
+                export_df = sonuc_df[['magaza_kod', 'urun_kod', 'depo_kod', 'stok', 'yol', 'min',
+                                      'haftalik_satis', 'cover', 'hedef_stok', 'rpt_ihtiyac', 
+                                      'ihtiyac', 'ihtiyac_turu', 'sevkiyat', 'karsilanamayan']].copy()
+                
+                # Kolon isimlerini Türkçeleştir
+                export_df.columns = ['Mağaza', 'Ürün Kodu', 'Depo', 'Stok', 'Yol', 'Min',
+                                    'Haftalık Satış', 'Cover', 'Hedef Stok', 'RPT İhtiyaç',
+                                    'Toplam İhtiyaç', 'İhtiyaç Türü', 'Sevk Adet', 'Karşılanamayan']
+                
+                # Dosya adı oluştur
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                if urun_kod:
+                    filename = f"sevkiyat_{urun_kod}_{timestamp}.xlsx"
+                elif kategori_kod:
+                    filename = f"sevkiyat_kat{kategori_kod}_{timestamp}.xlsx"
+                else:
+                    filename = f"sevkiyat_tum_{timestamp}.xlsx"
+                
+                # Dosya yolu
+                export_path = os.path.join("/tmp", filename)
+                
+                # Excel'e yaz
+                export_df.to_excel(export_path, index=False, sheet_name='Sevkiyat')
+                
+                rapor.append(f"\n📁 EXCEL DOSYASI OLUŞTURULDU:")
+                rapor.append(f"   📥 {export_path}")
+                
+                print(f"✅ Excel export: {export_path}")
+                
+            except Exception as ex:
+                rapor.append(f"\n⚠️ Excel export hatası: {str(ex)}")
+        
         return "\n".join(rapor)
         
     except Exception as e:
@@ -1795,7 +1873,7 @@ TOOLS = [
     },
     {
         "name": "sevkiyat_hesapla",
-        "description": "R4U Allocator motorunu çalıştırarak otomatik sevkiyat hesaplaması yapar. Segmentasyon, ihtiyaç hesaplama ve depo stok dağıtımını içerir. Kategori veya marka filtresi ile çalıştırılabilir. Sevkiyat planı oluşturmak için kullan.",
+        "description": "R4U Allocator motorunu çalıştırarak otomatik sevkiyat hesaplaması yapar. Segmentasyon, ihtiyaç hesaplama ve depo stok dağıtımını içerir. Kategori veya ürün filtresi ile çalıştırılabilir. export_excel=true ile Excel dosyası oluşturur.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1813,8 +1891,13 @@ TOOLS = [
                 },
                 "forward_cover": {
                     "type": "number",
-                    "description": "Hedef cover değeri (gün). Varsayılan: 7",
+                    "description": "Hedef cover değeri (hafta). Varsayılan: 7",
                     "default": 7.0
+                },
+                "export_excel": {
+                    "type": "boolean",
+                    "description": "Excel dosyası oluşturmak için true yap. Mağaza, stok, yol, sevk adet gibi kolonları içeren detaylı Excel çıktısı alırsın.",
+                    "default": false
                 }
             },
             "required": []
@@ -2039,7 +2122,8 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
                         kategori_kod=tool_input.get("kategori_kod", None),
                         urun_kod=tool_input.get("urun_kod", None),
                         marka_kod=tool_input.get("marka_kod", None),
-                        forward_cover=tool_input.get("forward_cover", 7.0)
+                        forward_cover=tool_input.get("forward_cover", 7.0),
+                        export_excel=tool_input.get("export_excel", False)
                     )
                 else:
                     tool_result = f"Bilinmeyen araç: {tool_name}"
