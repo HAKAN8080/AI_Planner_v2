@@ -10,6 +10,19 @@ from typing import Optional, List, Dict
 import anthropic
 import os
 import glob
+import sys
+
+# Sevkiyat motorunu import et (aynı klasörde olmalı)
+try:
+    from sevkiyat_motoru import SevkiyatMotoru
+    SEVKIYAT_MOTORU_AVAILABLE = True
+    print("✅ sevkiyat_motoru başarıyla import edildi")
+except ImportError as e:
+    SEVKIYAT_MOTORU_AVAILABLE = False
+    print(f"⚠️ sevkiyat_motoru import edilemedi: {e}")
+    print(f"   Python path: {sys.path[:3]}")
+    print(f"   Mevcut dizin: {os.getcwd()}")
+    print(f"   Dosyalar: {os.listdir('.')[:10]}")
 
 # =============================================================================
 # VERİ YÜKLEYİCİ
@@ -1232,21 +1245,23 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, marka_kod: str = None, f
     Returns:
         str: Sevkiyat özeti ve detayları
     """
-    # Debug: Veri durumunu kontrol et
-    debug_info = []
-    debug_info.append("🔍 DEBUG: Veri kontrolü")
-    debug_info.append(f"   - stok_satis: {len(getattr(kup, 'stok_satis', [])) if hasattr(kup, 'stok_satis') and kup.stok_satis is not None else 'YOK'}")
-    debug_info.append(f"   - depo_stok: {len(getattr(kup, 'depo_stok', [])) if hasattr(kup, 'depo_stok') and kup.depo_stok is not None else 'YOK'}")
-    debug_info.append(f"   - urun_master: {len(getattr(kup, 'urun_master', [])) if hasattr(kup, 'urun_master') and kup.urun_master is not None else 'YOK'}")
-    debug_info.append(f"   - magaza_master: {len(getattr(kup, 'magaza_master', [])) if hasattr(kup, 'magaza_master') and kup.magaza_master is not None else 'YOK'}")
-    debug_info.append(f"   - kategori_kod param: {kategori_kod}")
-    print("\n".join(debug_info))
+    print("\n" + "="*50)
+    print("🚀 SEVKIYAT_HESAPLA ÇAĞRILDI")
+    print("="*50)
     
-    try:
-        from sevkiyat_motoru import SevkiyatMotoru
-        print("   ✅ sevkiyat_motoru import edildi")
-    except ImportError as e:
-        return f"❌ Sevkiyat motoru modülü bulunamadı: {str(e)}\n\nLütfen sevkiyat_motoru.py dosyasının aynı klasörde olduğundan emin olun."
+    # Global import kontrolü
+    if not SEVKIYAT_MOTORU_AVAILABLE:
+        print("❌ SEVKIYAT_MOTORU_AVAILABLE = False")
+        return "❌ Sevkiyat motoru yüklenemedi. Lütfen sevkiyat_motoru.py dosyasının mevcut olduğundan emin olun."
+    
+    print("✅ SEVKIYAT_MOTORU_AVAILABLE = True")
+    
+    # Debug: Veri durumunu kontrol et
+    print(f"📊 Veri kontrolü:")
+    print(f"   - stok_satis: {len(kup.stok_satis) if hasattr(kup, 'stok_satis') and kup.stok_satis is not None else 'YOK'}")
+    print(f"   - depo_stok: {len(kup.depo_stok) if hasattr(kup, 'depo_stok') and kup.depo_stok is not None else 'YOK'}")
+    print(f"   - urun_master: {len(kup.urun_master) if hasattr(kup, 'urun_master') and kup.urun_master is not None else 'YOK'}")
+    print(f"   - kategori_kod param: {kategori_kod}")
     
     # Tip dönüşümleri
     if kategori_kod is not None:
@@ -1262,43 +1277,43 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, marka_kod: str = None, f
         except (ValueError, TypeError):
             forward_cover = 7.0
     
-    # Veri kontrolü - KupVeri doğrudan kullanılıyor
+    # Veri kontrolü
     stok_satis = getattr(kup, 'stok_satis', None)
     depo_stok = getattr(kup, 'depo_stok', None)
     
     if stok_satis is None or len(stok_satis) == 0:
+        print("❌ stok_satis boş veya yok")
         return "❌ Anlık stok/satış verisi yüklenmemiş. Lütfen anlik_stok_satis.csv dosyasını yükleyin."
     
     if depo_stok is None or len(depo_stok) == 0:
+        print("❌ depo_stok boş veya yok")
         return "❌ Depo stok verisi yüklenmemiş. Lütfen depo_stok.csv dosyasını yükleyin."
     
-    # Kategori kontrolü
-    if kategori_kod is not None and hasattr(kup, 'urun_master') and kup.urun_master is not None:
-        if 'kategori_kod' in kup.urun_master.columns:
-            urun_master = kup.urun_master.copy()
-            urun_master['kategori_kod'] = pd.to_numeric(urun_master['kategori_kod'], errors='coerce').fillna(0).astype(int)
-            kategori_urunleri = urun_master[urun_master['kategori_kod'] == kategori_kod]['urun_kod'].nunique()
-            print(f"   📊 Kategori {kategori_kod} için {kategori_urunleri} ürün bulundu")
-            if kategori_urunleri == 0:
-                return f"⚠️ Kategori {kategori_kod} için ürün bulunamadı. Lütfen kategori kodunu kontrol edin."
+    print("✅ Veri kontrolleri geçti")
     
     try:
-        # Motor oluştur ve hesapla - KupVeri doğrudan geçiriliyor
+        # Motor oluştur
+        print("🔧 SevkiyatMotoru oluşturuluyor...")
         motor = SevkiyatMotoru(kup)
-        print("   ✅ SevkiyatMotoru oluşturuldu")
+        print("✅ SevkiyatMotoru oluşturuldu")
         
+        # Hesapla
+        print(f"🔧 Hesaplama başlıyor (kategori={kategori_kod}, fc={forward_cover})...")
         sonuc = motor.hesapla(
             kategori_kod=kategori_kod,
             marka_kod=marka_kod,
             forward_cover=forward_cover
         )
-        print(f"   ✅ Hesaplama tamamlandı, hata: {sonuc.get('hata', 'Yok')}")
+        print(f"✅ Hesaplama tamamlandı")
         
         if sonuc['hata']:
+            print(f"❌ Motor hatası: {sonuc['hata']}")
             return f"❌ Hesaplama hatası: {sonuc['hata']}"
         
         ozet = sonuc['ozet']
         df = sonuc['sonuc']
+        
+        print(f"📊 Sonuç: {len(df) if df is not None else 0} satır")
         
         if df is None or len(df) == 0:
             return "ℹ️ Sevkiyat ihtiyacı bulunamadı. Tüm mağazaların stoku yeterli görünüyor."
