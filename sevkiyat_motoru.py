@@ -56,6 +56,7 @@ class SevkiyatMotoru:
     def hesapla(
         self,
         kategori_kod: Optional[int] = None,
+        urun_kod: Optional[str] = None,
         marka_kod: Optional[str] = None,
         forward_cover: float = 7.0,
         sisme_orani: float = None,
@@ -67,6 +68,7 @@ class SevkiyatMotoru:
         
         Args:
             kategori_kod: Kategori filtresi (11=Renkli Kozmetik, 14=Saç, vb.)
+            urun_kod: Tek ürün filtresi (opsiyonel)
             marka_kod: Marka filtresi
             forward_cover: Hedef cover değeri (default 7 gün)
             sisme_orani: Şişme oranı override (default matrise göre)
@@ -91,7 +93,7 @@ class SevkiyatMotoru:
             
             # 2. VERİ HAZIRLA
             print("   [Motor] Veri hazırlanıyor...")
-            df = self._veri_hazirla(kategori_kod, marka_kod)
+            df = self._veri_hazirla(kategori_kod, urun_kod, marka_kod)
             print(f"   [Motor] Veri hazır: {len(df)} satır")
             
             if len(df) == 0:
@@ -145,11 +147,19 @@ class SevkiyatMotoru:
             return False
         return True
     
-    def _veri_hazirla(self, kategori_kod: Optional[int], marka_kod: Optional[str]) -> pd.DataFrame:
+    def _veri_hazirla(self, kategori_kod: Optional[int], urun_kod: Optional[str], marka_kod: Optional[str]) -> pd.DataFrame:
         """Ana veriyi hazırla ve filtrele"""
         df = self._get_stok_satis().copy()
         df['urun_kod'] = df['urun_kod'].astype(str)
         df['magaza_kod'] = df['magaza_kod'].astype(str)
+        
+        # Tek ürün filtresi (en önce uygula)
+        if urun_kod is not None:
+            urun_kod = str(urun_kod).strip()
+            df = df[df['urun_kod'] == urun_kod]
+            print(f"   [Motor] Ürün filtresi ({urun_kod}): {len(df)} satır")
+            if len(df) == 0:
+                return df
         
         # Ürün master varsa birleştir
         if self.kup.urun_master is not None and len(self.kup.urun_master) > 0:
