@@ -318,19 +318,18 @@ class KupVeri:
 # ARAÇ FONKSİYONLARI
 # =============================================================================
 
-def trading_analiz(kup: KupVeri, ana_grup: str = None, ara_grup: str = None) -> str:
+def trading_analiz(kup: KupVeri) -> str:
     """
-    Trading raporu analizi - 3 Seviyeli Hiyerarşi
+    Trading raporu analizi - Basit versiyon
     
-    Hiyerarşi Kolonları:
-    - Mevcut Ana Grup: RENKLİ KOZMETİK, CİLT BAKIM, SAÇ BAKIM, PARFÜM...
-    - Mevcut Ara Grup: GÖZ ÜRÜNLERİ, YÜZ ÜRÜNLERİ, ŞAMPUAN...
-    - Alt Grup: MASKARA, FAR, FONDOTEN... (en detay seviye)
+    NOT: Trading.xlsx'te sadece 1. seviye (ana kategori) verisi olmalı.
+    Alt kategoriler ve mal grupları ayrı dosyada tutulacak.
     
-    Kullanım:
-    - trading_analiz() → Şirket özeti + Ana Gruplar
-    - trading_analiz(ana_grup="RENKLİ KOZMETİK") → Ara Grup detayı
-    - trading_analiz(ana_grup="RENKLİ KOZMETİK", ara_grup="GÖZ ÜRÜNLERİ") → Alt Grup detayı
+    Analiz Sırası:
+    1. Şirket Toplamı
+    2. Kategori Bazlı Performans
+    3. Top 10 Ürün + Depo Stok
+    4. Kritik Durumlar
     """
     
     if len(kup.trading) == 0:
@@ -339,28 +338,19 @@ def trading_analiz(kup: KupVeri, ana_grup: str = None, ara_grup: str = None) -> 
     sonuc = []
     df = kup.trading.copy()
     
-    # Kolon isimlerini normalize et
-    df.columns = [str(c).strip() for c in df.columns]
+    # Kolon isimlerini bul
     kolonlar = list(df.columns)
-    print(f"Trading kolonları: {kolonlar[:10]}")
+    print(f"Trading kolonları: {kolonlar[:15]}")
     
-    # Hiyerarşi kolonlarını bul
-    col_ana_grup = None
-    col_ara_grup = None
-    col_alt_grup = None
-    
+    # Kategori kolonu bul (ilk kolon genellikle)
+    kategori_kol = df.columns[0]
     for kol in df.columns:
         kol_lower = str(kol).lower()
-        if 'ana grup' in kol_lower or 'ana_grup' in kol_lower:
-            col_ana_grup = kol
-        elif 'ara grup' in kol_lower or 'ara_grup' in kol_lower:
-            col_ara_grup = kol
-        elif 'alt grup' in kol_lower or 'alt_grup' in kol_lower:
-            col_alt_grup = kol
+        if 'satır' in kol_lower or 'etiket' in kol_lower or 'kategori' in kol_lower:
+            kategori_kol = kol
+            break
     
-    print(f"Hiyerarşi kolonları: ana={col_ana_grup}, ara={col_ara_grup}, alt={col_alt_grup}")
-    
-    # Kolon mapping fonksiyonu
+    # Kolon mapping
     def find_col(keywords, exclude=[]):
         for kol in df.columns:
             kol_lower = str(kol).lower()
@@ -370,6 +360,7 @@ def trading_analiz(kup: KupVeri, ana_grup: str = None, ara_grup: str = None) -> 
     
     # Kritik kolonları bul
     col_ciro_achieved = find_col(['achieved', 'sales', 'budget', 'value', 'try'], ['profit', 'unit'])
+    col_adet_achieved = find_col(['achieved', 'sales', 'budget', 'unit'], ['value', 'profit'])
     col_ty_cover = find_col(['ty', 'store', 'cover'], ['lfl', 'ly'])
     col_ly_cover = find_col(['ly', 'store', 'cover'], ['lfl'])
     col_ty_marj = find_col(['ty', 'gross', 'margin', 'try'], ['lfl', 'ly', 'budget'])
@@ -379,242 +370,415 @@ def trading_analiz(kup: KupVeri, ana_grup: str = None, ara_grup: str = None) -> 
     col_lfl_stok = find_col(['lfl', 'stock', 'unit', 'tyvsly'], [])
     col_fiyat_artis = find_col(['lfl', 'unit', 'sales', 'price', 'tyvsly'], [])
     col_lfl_kar = find_col(['lfl', 'profit', 'tyvsly'], ['unit'])
+    col_ciro = find_col(['ty', 'sales', 'value', 'try'], ['budget', 'achieved', 'lfl', 'gap'])
+    col_indirim = find_col(['tw', 'indirim'], []) or find_col(['ty', 'discount'], [])
     
-    # PAY KOLONLARI
-    col_adet_pay = find_col(['ty', 'lfl', 'sales', 'unit'], ['tyvsly', 'price', 'cost', 'budget'])
-    col_stok_pay = find_col(['ty', 'avg', 'store', 'stock', 'cost', 'lc'], ['tyvsly'])
-    col_ciro_pay = find_col(['ty', 'lfl', 'sales', 'value', 'lc'], ['tyvsly'])
-    col_kar_pay = find_col(['ty', 'lfl', 'gross', 'profit', 'lc'], ['tyvsly'])
+    # PAY KOLONLARI (Excel'de zaten % olarak var)
+    col_adet_pay = find_col(['ty', 'lfl', 'sales', 'unit'], ['tyvsly', 'price', 'cost', 'budget'])  # TY LFL Sales Unit
+    col_stok_pay = find_col(['ty', 'avg', 'store', 'stock', 'cost', 'lc'], ['tyvsly'])  # TY Avg Store Stock Cost LC
+    col_ciro_pay = find_col(['ty', 'lfl', 'sales', 'value', 'lc'], ['tyvsly'])  # TY LFL Sales Value LC
+    col_kar_pay = find_col(['ty', 'lfl', 'gross', 'profit', 'lc'], ['tyvsly'])  # TY LFL Gross Profit LC
+    
+    print(f"Bulunan kolonlar: ciro_achieved={col_ciro_achieved}, ty_marj={col_ty_marj}")
+    print(f"Pay kolonları: adet={col_adet_pay}, stok={col_stok_pay}, ciro={col_ciro_pay}, kar={col_kar_pay}")
+    
+    if col_ciro_achieved is None:
+        return f"❌ 'Achieved TY Sales Budget Value TRY' kolonu bulunamadı.\nMevcut kolonlar: {kolonlar[:15]}"
     
     # Parse fonksiyonu
     def parse_val(val):
         if pd.isna(val):
-            return 0
+            return None
         if isinstance(val, str):
             val = val.replace('%', '').replace(',', '.').replace(' ', '').strip()
             try:
                 return float(val)
             except:
-                return 0
+                return None
         try:
             return float(val)
         except:
-            return 0
+            return None
     
-    def parse_pct(val):
-        """Yüzde değeri parse et - ondalık ise 100 ile çarp"""
-        v = parse_val(val)
-        if -2 < v < 2 and v != 0:
-            return v * 100
-        return v
+    # Tüm kategorileri topla
+    kategoriler = []
+    toplam_ciro = 0
     
-    # Satır verilerini çıkar
-    def extract_row(row):
-        return {
-            'ana_grup': str(row.get(col_ana_grup, '')).strip() if col_ana_grup else '',
-            'ara_grup': str(row.get(col_ara_grup, '')).strip() if col_ara_grup else '',
-            'alt_grup': str(row.get(col_alt_grup, '')).strip() if col_alt_grup else '',
-            'ciro_achieved': parse_pct(row.get(col_ciro_achieved, 0)),
-            'ty_cover': parse_val(row.get(col_ty_cover, 0)),
-            'ly_cover': parse_val(row.get(col_ly_cover, 0)),
-            'ty_marj': parse_pct(row.get(col_ty_marj, 0)),
-            'ly_marj': parse_pct(row.get(col_ly_marj, 0)),
-            'lfl_ciro': parse_pct(row.get(col_lfl_ciro, 0)),
-            'lfl_adet': parse_pct(row.get(col_lfl_adet, 0)),
-            'lfl_stok': parse_pct(row.get(col_lfl_stok, 0)),
-            'lfl_kar': parse_pct(row.get(col_lfl_kar, 0)),
-            'fiyat_artis': parse_pct(row.get(col_fiyat_artis, 0)),
-            'adet_pay': parse_pct(row.get(col_adet_pay, 0)),
-            'stok_pay': parse_pct(row.get(col_stok_pay, 0)),
-            'ciro_pay': parse_pct(row.get(col_ciro_pay, 0)),
-            'kar_pay': parse_pct(row.get(col_kar_pay, 0))
-        }
-    
-    # Toplam satırlarını filtrele
-    def is_toplam(row_data):
-        """Toplam satırı mı kontrol et"""
-        ana = row_data['ana_grup'].lower()
-        ara = row_data['ara_grup'].lower()
-        if 'toplam' in ana or 'genel toplam' in ana:
-            return True
-        if 'toplam' in ara:
-            return True
-        return False
-    
-    def is_ana_grup_toplam(row_data):
-        """Ana grup toplam satırı mı (Toplam RENKLİ KOZMETİK gibi)"""
-        ana = row_data['ana_grup']
-        ara = row_data['ara_grup']
-        alt = row_data['alt_grup']
-        return ana.startswith('Toplam ') and ara == '' and alt == ''
-    
-    def is_ara_grup_toplam(row_data):
-        """Ara grup toplam satırı mı (Toplam GÖZ ÜRÜNLERİ gibi)"""
-        ara = row_data['ara_grup']
-        alt = row_data['alt_grup']
-        return ara.startswith('Toplam ') and alt == ''
-    
-    # ====================================================================
-    # VERİYİ SEVİYEYE GÖRE FİLTRELE
-    # ====================================================================
-    
-    all_rows = [extract_row(row) for _, row in df.iterrows()]
-    
-    # Genel Toplam satırını bul
-    genel_toplam = None
-    for r in all_rows:
-        if r['ana_grup'] == 'Genel Toplam' or 'genel toplam' in r['ana_grup'].lower():
-            genel_toplam = r
-            break
-    
-    if ana_grup is None:
-        # ŞİRKET ÖZETİ + ANA GRUPLAR
-        # Ana grup toplamlarını bul (Toplam RENKLİ KOZMETİK, Toplam CİLT BAKIM...)
-        ana_gruplar = [r for r in all_rows if is_ana_grup_toplam(r)]
+    for _, row in df.iterrows():
+        kategori = str(row.get(kategori_kol, 'N/A'))[:40]
         
-        # Toplam kelimesini kaldır ve sırala
-        for ag in ana_gruplar:
-            ag['ad'] = ag['ana_grup'].replace('Toplam ', '')
-        ana_gruplar.sort(key=lambda x: x['ciro_pay'], reverse=True)
+        # Total/Grand satırlarını atla
+        if pd.isna(kategori) or kategori == 'nan' or kategori == 'N/A':
+            continue
+        if any(x in kategori.lower() for x in ['total', 'grand', 'genel', 'toplam']):
+            continue
         
-        # Şirket özeti
-        sonuc.append("=" * 60)
-        sonuc.append("📊 ŞİRKET TOPLAMI - HAFTALIK PERFORMANS")
-        sonuc.append("=" * 60 + "\n")
+        ciro_achieved = parse_val(row.get(col_ciro_achieved, None))
+        if ciro_achieved is None:
+            continue
         
-        if genel_toplam:
-            gt = genel_toplam
-            # Bütçe
-            butce_emoji = "✅" if gt['ciro_achieved'] >= 0 else ("🔴" if gt['ciro_achieved'] < -15 else "⚠️")
-            sonuc.append(f"💰 BÜTÇE: {butce_emoji} %{100 + gt['ciro_achieved']:.0f} gerçekleşme")
+        # Ondalık ise yüzdeye çevir
+        if -2 < ciro_achieved < 2 and ciro_achieved != 0:
+            ciro_achieved = ciro_achieved * 100
+        
+        # Diğer değerleri al
+        ty_cover = parse_val(row.get(col_ty_cover, 0)) or 0
+        ly_cover = parse_val(row.get(col_ly_cover, 0)) or 0
+        
+        ty_marj = parse_val(row.get(col_ty_marj, 0)) or 0
+        if -2 < ty_marj < 2 and ty_marj != 0:
+            ty_marj = ty_marj * 100
             
-            # Cover
-            cover_emoji = "🔴" if gt['ty_cover'] > 12 else ("⚠️" if gt['ty_cover'] > 10 else "✅")
-            sonuc.append(f"📦 COVER: {cover_emoji} {gt['ty_cover']:.1f} hf (GY: {gt['ly_cover']:.1f})")
+        ly_marj = parse_val(row.get(col_ly_marj, 0)) or 0
+        if -2 < ly_marj < 2 and ly_marj != 0:
+            ly_marj = ly_marj * 100
             
-            # Marj
-            marj_deg = gt['ty_marj'] - gt['ly_marj']
-            marj_emoji = "🔴" if marj_deg < -3 else ("⚠️" if marj_deg < 0 else "✅")
-            sonuc.append(f"💵 MARJ: {marj_emoji} %{gt['ty_marj']:.1f} (GY: %{gt['ly_marj']:.1f}, {marj_deg:+.1f})")
+        lfl_ciro = parse_val(row.get(col_lfl_ciro, 0)) or 0
+        if -2 < lfl_ciro < 2 and lfl_ciro != 0:
+            lfl_ciro = lfl_ciro * 100
             
-            # LFL
-            lfl_emoji = "🔴" if gt['lfl_ciro'] < -10 else ("⚠️" if gt['lfl_ciro'] < 0 else "✅")
-            sonuc.append(f"📈 LFL CİRO: {lfl_emoji} %{gt['lfl_ciro']:+.1f}")
-            sonuc.append(f"   LFL ADET: %{gt['lfl_adet']:+.1f} | FİYAT ARTIŞI: %{gt['fiyat_artis']:+.1f}")
+        lfl_adet = parse_val(row.get(col_lfl_adet, 0)) or 0
+        if -2 < lfl_adet < 2 and lfl_adet != 0:
+            lfl_adet = lfl_adet * 100
+            
+        lfl_stok = parse_val(row.get(col_lfl_stok, 0)) or 0
+        if -2 < lfl_stok < 2 and lfl_stok != 0:
+            lfl_stok = lfl_stok * 100
+            
+        fiyat_artis = parse_val(row.get(col_fiyat_artis, 0)) or 0
+        if -2 < fiyat_artis < 2 and fiyat_artis != 0:
+            fiyat_artis = fiyat_artis * 100
         
-        # Ana Gruplar Tablosu
-        sonuc.append("\n" + "=" * 60)
-        sonuc.append("🏆 ANA GRUP PERFORMANSI")
-        sonuc.append("=" * 60 + "\n")
+        lfl_kar = parse_val(row.get(col_lfl_kar, 0)) or 0
+        if -2 < lfl_kar < 2 and lfl_kar != 0:
+            lfl_kar = lfl_kar * 100
         
-        sonuc.append(f"{'Ana Grup':<28} {'Ciro%':>6} {'Adet%':>6} {'Stok%':>6} {'Kar%':>6} {'Cover':>6} {'Bütçe':>7}")
-        sonuc.append("-" * 75)
+        ciro = parse_val(row.get(col_ciro, 0)) or 0
+        toplam_ciro += ciro
         
-        for ag in ana_gruplar[:12]:
-            ad = ag['ad'][:27]
-            cover_str = f"{ag['ty_cover']:.1f}"
-            butce_str = f"{ag['ciro_achieved']:+.0f}%"
-            sonuc.append(f"{ad:<28} {ag['ciro_pay']:>5.1f}% {ag['adet_pay']:>5.1f}% {ag['stok_pay']:>5.1f}% {ag['kar_pay']:>5.1f}% {cover_str:>6} {butce_str:>7}")
+        # Pay değerlerini al (Excel'de zaten % olarak var)
+        adet_pay = parse_val(row.get(col_adet_pay, 0)) or 0
+        if -2 < adet_pay < 2 and adet_pay != 0:
+            adet_pay = adet_pay * 100
+            
+        stok_pay = parse_val(row.get(col_stok_pay, 0)) or 0
+        if -2 < stok_pay < 2 and stok_pay != 0:
+            stok_pay = stok_pay * 100
+            
+        ciro_pay = parse_val(row.get(col_ciro_pay, 0)) or 0
+        if -2 < ciro_pay < 2 and ciro_pay != 0:
+            ciro_pay = ciro_pay * 100
+            
+        kar_pay = parse_val(row.get(col_kar_pay, 0)) or 0
+        if -2 < kar_pay < 2 and kar_pay != 0:
+            kar_pay = kar_pay * 100
         
-        # Kritik durumlar
-        sonuc.append("\n" + "-" * 60)
-        kritik = [ag for ag in ana_gruplar if ag['ciro_achieved'] < -15 or ag['ty_cover'] > 12]
-        if kritik:
-            sonuc.append("⚠️ KRİTİK ANA GRUPLAR:")
-            for k in kritik[:5]:
-                issues = []
-                if k['ciro_achieved'] < -15:
-                    issues.append(f"Bütçe {k['ciro_achieved']:+.0f}%")
-                if k['ty_cover'] > 12:
-                    issues.append(f"Cover {k['ty_cover']:.0f}hf")
-                sonuc.append(f"   • {k['ad']}: {', '.join(issues)}")
-        
-        sonuc.append(f"\n💡 Detay için: trading_analiz(ana_grup='RENKLİ KOZMETİK')")
-        
-    elif ara_grup is None:
-        # ANA GRUP DETAYI - ARA GRUPLARI GÖSTER
-        ana_grup_upper = ana_grup.upper()
-        
-        # Bu ana grubun ara grup toplamlarını bul
-        ara_gruplar = []
-        for r in all_rows:
-            if r['ana_grup'].upper() == ana_grup_upper and is_ara_grup_toplam(r):
-                r['ad'] = r['ara_grup'].replace('Toplam ', '')
-                ara_gruplar.append(r)
-        
-        if not ara_gruplar:
-            return f"❌ '{ana_grup}' ana grubunda ara grup bulunamadı."
-        
-        ara_gruplar.sort(key=lambda x: x['ciro_pay'], reverse=True)
-        
-        sonuc.append("=" * 60)
-        sonuc.append(f"📊 {ana_grup_upper} - ARA GRUP DETAYI")
-        sonuc.append("=" * 60 + "\n")
-        
-        sonuc.append(f"{'Ara Grup':<28} {'Ciro%':>6} {'Adet%':>6} {'Stok%':>6} {'Kar%':>6} {'Cover':>6} {'LFL':>7}")
-        sonuc.append("-" * 75)
-        
-        for ag in ara_gruplar:
-            ad = ag['ad'][:27]
-            cover_str = f"{ag['ty_cover']:.1f}"
-            lfl_str = f"{ag['lfl_ciro']:+.0f}%"
-            sonuc.append(f"{ad:<28} {ag['ciro_pay']:>5.1f}% {ag['adet_pay']:>5.1f}% {ag['stok_pay']:>5.1f}% {ag['kar_pay']:>5.1f}% {cover_str:>6} {lfl_str:>7}")
-        
-        # Stok/Ciro dengesizliği
-        sonuc.append("\n" + "-" * 60)
-        for ag in ara_gruplar:
-            if ag['ciro_pay'] > 0:
-                oran = ag['stok_pay'] / ag['ciro_pay']
-                if oran > 1.3:
-                    sonuc.append(f"⚠️ {ag['ad']}: Stok fazla (stok/ciro: {oran:.1f}x) → ERİTME")
-                elif oran < 0.7:
-                    sonuc.append(f"⚠️ {ag['ad']}: Stok az (stok/ciro: {oran:.1f}x) → SEVKİYAT")
-        
-        sonuc.append(f"\n💡 Detay için: trading_analiz(ana_grup='{ana_grup}', ara_grup='GÖZ ÜRÜNLERİ')")
-        
+        kategoriler.append({
+            'ad': kategori,
+            'ciro': ciro,
+            'ciro_achieved': ciro_achieved,
+            'ty_cover': ty_cover,
+            'ly_cover': ly_cover,
+            'ty_marj': ty_marj,
+            'ly_marj': ly_marj,
+            'lfl_ciro': lfl_ciro,
+            'lfl_adet': lfl_adet,
+            'lfl_stok': lfl_stok,
+            'lfl_kar': lfl_kar,
+            'fiyat_artis': fiyat_artis,
+            'adet_pay': adet_pay,
+            'stok_pay': stok_pay,
+            'ciro_pay': ciro_pay,
+            'kar_pay': kar_pay
+        })
+    
+    if not kategoriler:
+        return "❌ Analiz edilecek kategori bulunamadı."
+    
+    # Ciroya göre sırala (ciro_pay zaten Excel'den geliyor)
+    # Ciroya göre sırala
+    kategoriler.sort(key=lambda x: x['ciro'], reverse=True)
+    
+    print(f"Hiyerarşi özeti: {len(kategoriler)} ana kategori, {len(alt_kategoriler)} alt kategori, {len(mal_gruplari)} mal grubu")
+    
+    # ========================================
+    # 1. ŞİRKET TOPLAMI
+    # ========================================
+    sonuc.append("=" * 55)
+    sonuc.append("📊 ŞİRKET TOPLAMI - HAFTALIK PERFORMANS")
+    sonuc.append("=" * 55 + "\n")
+    
+    # Ağırlıklı ortalama hesapla (ana kategorilerden)
+    if toplam_ciro > 0:
+        avg_achieved = sum(k['ciro_achieved'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_ty_cover = sum(k['ty_cover'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_ly_cover = sum(k['ly_cover'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_ty_marj = sum(k['ty_marj'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_ly_marj = sum(k['ly_marj'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_lfl_ciro = sum(k['lfl_ciro'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_lfl_adet = sum(k['lfl_adet'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_lfl_stok = sum(k['lfl_stok'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_lfl_kar = sum(k['lfl_kar'] * k['ciro'] for k in kategoriler) / toplam_ciro
+        avg_fiyat = sum(k['fiyat_artis'] * k['ciro'] for k in kategoriler) / toplam_ciro
     else:
-        # ARA GRUP DETAYI - ALT GRUPLARI GÖSTER
-        ana_grup_upper = ana_grup.upper()
-        ara_grup_upper = ara_grup.upper()
+        avg_achieved = avg_ty_cover = avg_ly_cover = avg_ty_marj = avg_ly_marj = 0
+        avg_lfl_ciro = avg_lfl_adet = avg_lfl_stok = avg_lfl_kar = avg_fiyat = 0
+    
+    # --- BÜTÇE DURUMU ---
+    sonuc.append("💰 BÜTÇE PERFORMANSI")
+    if avg_achieved >= 0:
+        sonuc.append(f"   ✅ Ciro Bütçe Gerçekleşme: %{100 + avg_achieved:.1f}")
+        sonuc.append(f"      Hedefin %{avg_achieved:.1f} ÜSTÜNDEYİZ")
+    else:
+        emoji = "🔴" if avg_achieved < -15 else "⚠️"
+        sonuc.append(f"   {emoji} Ciro Bütçe Gerçekleşme: %{100 + avg_achieved:.1f}")
+        sonuc.append(f"      Hedefin %{abs(avg_achieved):.1f} altındayız")
+    
+    # --- COVER DURUMU ---
+    sonuc.append("\n📦 STOK DÖNÜŞ HIZI (Cover)")
+    cover_degisim = avg_ty_cover - avg_ly_cover
+    cover_emoji = "🔴" if avg_ty_cover > 12 else ("⚠️" if avg_ty_cover > 10 else "✅")
+    sonuc.append(f"   {cover_emoji} Bu Yıl: {avg_ty_cover:.1f} hafta | Geçen Yıl: {avg_ly_cover:.1f} hafta")
+    if cover_degisim > 1:
+        sonuc.append(f"      ⚠️ Cover {cover_degisim:.1f} hafta ARTTI (stok birikiyor)")
+    elif cover_degisim < -1:
+        sonuc.append(f"      ✅ Cover {abs(cover_degisim):.1f} hafta AZALDI (stok hızlandı)")
+    else:
+        sonuc.append(f"      → Cover stabil")
+    
+    # --- BRÜT KAR MARJI ---
+    sonuc.append("\n📈 BRÜT KAR MARJI")
+    marj_degisim = avg_ty_marj - avg_ly_marj
+    marj_emoji = "🔴" if avg_ty_marj < 30 else ("⚠️" if marj_degisim < -2 else "✅")
+    sonuc.append(f"   {marj_emoji} Bu Yıl: %{avg_ty_marj:.1f} | Geçen Yıl: %{avg_ly_marj:.1f}")
+    if marj_degisim > 0:
+        sonuc.append(f"      ✅ Marj {marj_degisim:.1f} puan İYİLEŞTİ")
+    elif marj_degisim < -2:
+        sonuc.append(f"      🔴 Marj {abs(marj_degisim):.1f} puan GERİLEDİ - fiyat/maliyet baskısı var")
+    else:
+        sonuc.append(f"      → Marj stabil")
+    
+    # --- LFL BÜYÜME ---
+    sonuc.append("\n📊 LFL BÜYÜME (Geçen Yıla Göre)")
+    
+    # LFL Ciro
+    lfl_ciro_emoji = "🔴" if avg_lfl_ciro < -20 else ("⚠️" if avg_lfl_ciro < 0 else "✅")
+    sonuc.append(f"   {lfl_ciro_emoji} Ciro: %{avg_lfl_ciro:+.1f}")
+    
+    # LFL Adet
+    lfl_adet_emoji = "🔴" if avg_lfl_adet < -20 else ("⚠️" if avg_lfl_adet < 0 else "✅")
+    sonuc.append(f"   {lfl_adet_emoji} Adet: %{avg_lfl_adet:+.1f}")
+    
+    # Ciro vs Adet yorumu
+    if avg_lfl_ciro > 0 and avg_lfl_adet < 0:
+        sonuc.append(f"      → Ciro artıyor ama adet düşüyor: FİYAT ARTIŞI etkisi")
+    elif avg_lfl_ciro < avg_lfl_adet:
+        sonuc.append(f"      → Adet ciroya göre iyi: KAMPANYA/İNDİRİM etkisi olabilir")
+    
+    # LFL Stok
+    lfl_stok_emoji = "🔴" if avg_lfl_stok < -30 else ("⚠️" if avg_lfl_stok > 20 else "✅")
+    sonuc.append(f"   {lfl_stok_emoji} Stok: %{avg_lfl_stok:+.1f}")
+    
+    # LFL Brüt Kar
+    if avg_lfl_kar != 0:
+        lfl_kar_emoji = "🔴" if avg_lfl_kar < -20 else ("⚠️" if avg_lfl_kar < 0 else "✅")
+        sonuc.append(f"   {lfl_kar_emoji} Brüt Kar: %{avg_lfl_kar:+.1f}")
+    
+    # Fiyat artışı
+    sonuc.append(f"   💰 Fiyat Artışı: %{avg_fiyat:+.1f}")
+    
+    # ========================================
+    # 2. KATEGORİ KONSANTRASYONU (4 PAY İLE)
+    # ========================================
+    sonuc.append("\n" + "=" * 55)
+    sonuc.append("🏆 KATEGORİ KONSANTRASYONU")
+    sonuc.append("=" * 55 + "\n")
+    
+    # İlk 3 kategorinin toplam payları
+    top3_ciro_pay = sum(k['ciro_pay'] for k in kategoriler[:3])
+    top3_adet_pay = sum(k['adet_pay'] for k in kategoriler[:3])
+    top3_stok_pay = sum(k['stok_pay'] for k in kategoriler[:3])
+    top3_kar_pay = sum(k['kar_pay'] for k in kategoriler[:3])
+    
+    sonuc.append(f"İlk 3 kategorinin toplam payları:")
+    sonuc.append(f"   Ciro: %{top3_ciro_pay:.0f} | Adet: %{top3_adet_pay:.0f} | Stok: %{top3_stok_pay:.0f} | Kar: %{top3_kar_pay:.0f}\n")
+    
+    # Tablo başlığı
+    sonuc.append(f"{'Kategori':<25} {'Ciro%':>7} {'Adet%':>7} {'Stok%':>7} {'Kar%':>7} {'Cover':>7} {'Bütçe':>7}")
+    sonuc.append("-" * 75)
+    
+    for kat in kategoriler[:8]:  # İlk 8 kategori
+        cover_str = f"{kat['ty_cover']:.1f}hf"
+        butce_str = f"%{kat['ciro_achieved']:+.0f}"
         
-        # Bu ara grubun alt gruplarını bul (toplam olmayanlar)
-        alt_gruplar = []
-        for r in all_rows:
-            ana_match = r['ana_grup'].upper() == ana_grup_upper
-            ara_match = r['ara_grup'].upper() == ara_grup_upper
-            has_alt = r['alt_grup'] != '' and not r['alt_grup'].startswith('Toplam')
-            
-            if ana_match and ara_match and has_alt:
-                r['ad'] = r['alt_grup']
-                alt_gruplar.append(r)
+        sonuc.append(f"{kat['ad']:<25} {kat['ciro_pay']:>6.1f}% {kat['adet_pay']:>6.1f}% {kat['stok_pay']:>6.1f}% {kat['kar_pay']:>6.1f}% {cover_str:>7} {butce_str:>7}")
+    
+    # Stok/Ciro oranı yorumu
+    sonuc.append("")
+    for kat in kategoriler[:5]:
+        if kat['ciro_pay'] > 0:
+            stok_ciro_oran = kat['stok_pay'] / kat['ciro_pay']
+            if stok_ciro_oran > 1.3:
+                sonuc.append(f"   ⚠️ {kat['ad']}: Stok payı ciro payından %{(stok_ciro_oran-1)*100:.0f} fazla → ERİTME gerekli")
+            elif stok_ciro_oran < 0.7:
+                sonuc.append(f"   ⚠️ {kat['ad']}: Stok payı ciro payından %{(1-stok_ciro_oran)*100:.0f} az → SEVKİYAT gerekli")
+    
+    # ========================================
+    # 3. TOP 10 ÜRÜN ANALİZİ
+    # ========================================
+    sonuc.append("\n" + "=" * 55)
+    sonuc.append("🔝 EN ÇOK SATAN 10 ÜRÜN + DEPO STOK DURUMU")
+    sonuc.append("=" * 55 + "\n")
+    
+    # Anlık stok satış verisinden top 10 ürün
+    stok_satis = getattr(kup, 'stok_satis', None)
+    depo_stok = getattr(kup, 'depo_stok', None)
+    urun_master = getattr(kup, 'urun_master', None)
+    
+    if stok_satis is not None and len(stok_satis) > 0:
+        # Ürün bazında ciro topla
+        urun_ciro = stok_satis.groupby('urun_kod').agg({
+            'ciro': 'sum',
+            'satis': 'sum',
+            'stok': 'sum'
+        }).reset_index()
+        urun_ciro = urun_ciro.sort_values('ciro', ascending=False).head(10)
         
-        if not alt_gruplar:
-            return f"❌ '{ana_grup} > {ara_grup}' altında ürün grubu bulunamadı."
+        # Depo stok dictionary
+        depo_dict = {}
+        if depo_stok is not None and len(depo_stok) > 0:
+            depo_grp = depo_stok.groupby('urun_kod')['stok'].sum()
+            depo_dict = depo_grp.to_dict()
         
-        alt_gruplar.sort(key=lambda x: x['ciro_pay'], reverse=True)
+        # Ürün adı dictionary
+        urun_adi_dict = {}
+        if urun_master is not None and 'urun_kod' in urun_master.columns:
+            if 'mg' in urun_master.columns:
+                urun_adi_dict = dict(zip(urun_master['urun_kod'].astype(str), urun_master['mg'].astype(str)))
         
-        sonuc.append("=" * 60)
-        sonuc.append(f"📊 {ana_grup_upper} > {ara_grup_upper} - MAL GRUBU DETAYI")
-        sonuc.append("=" * 60 + "\n")
-        
-        sonuc.append(f"{'Mal Grubu':<24} {'Ciro%':>6} {'Adet%':>6} {'Stok%':>6} {'Cover':>6} {'LFL':>7} {'Bütçe':>7}")
+        sonuc.append(f"{'Sıra':<4} {'Ürün Kodu':<12} {'Haftalık Ciro':>14} {'Satış':>8} {'Mğz Stok':>10} {'Depo Stok':>10} {'Durum':<12}")
         sonuc.append("-" * 75)
         
-        for ag in alt_gruplar:
-            ad = ag['ad'][:23]
-            cover_str = f"{ag['ty_cover']:.1f}"
-            lfl_str = f"{ag['lfl_ciro']:+.0f}%"
-            butce_str = f"{ag['ciro_achieved']:+.0f}%"
-            sonuc.append(f"{ad:<24} {ag['ciro_pay']:>5.1f}% {ag['adet_pay']:>5.1f}% {ag['stok_pay']:>5.1f}% {cover_str:>6} {lfl_str:>7} {butce_str:>7}")
+        for i, row in enumerate(urun_ciro.itertuples(), 1):
+            urun_kod = str(row.urun_kod)
+            ciro = row.ciro
+            satis = row.satis
+            mgz_stok = row.stok
+            depo = depo_dict.get(urun_kod, depo_dict.get(int(row.urun_kod) if str(row.urun_kod).isdigit() else 0, 0))
+            
+            # Cover hesapla
+            haftalik_satis = satis if satis > 0 else 1
+            cover = (mgz_stok + depo) / haftalik_satis
+            
+            # Durum belirle
+            if depo == 0 and mgz_stok < haftalik_satis * 2:
+                durum = "🔴 KRİTİK"
+            elif depo == 0:
+                durum = "⚠️ Depo Yok"
+            elif cover < 4:
+                durum = "⚠️ Düşük"
+            elif cover > 12:
+                durum = "📦 Fazla"
+            else:
+                durum = "✅ OK"
+            
+            sonuc.append(f"{i:<4} {urun_kod:<12} {ciro:>14,.0f} {satis:>8,.0f} {mgz_stok:>10,.0f} {depo:>10,.0f} {durum:<12}")
         
-        # En iyi ve en kötü performans
-        sonuc.append("\n" + "-" * 60)
-        en_iyi = max(alt_gruplar, key=lambda x: x['lfl_ciro'])
-        en_kotu = min(alt_gruplar, key=lambda x: x['lfl_ciro'])
-        sonuc.append(f"✅ En iyi: {en_iyi['ad']} (LFL: %{en_iyi['lfl_ciro']:+.0f})")
-        sonuc.append(f"🔴 En kötü: {en_kotu['ad']} (LFL: %{en_kotu['lfl_ciro']:+.0f})")
+        # Top 10 özeti
+        top10_depo_yok = sum(1 for _, row in urun_ciro.iterrows() 
+                            if depo_dict.get(str(row['urun_kod']), 0) == 0)
+        if top10_depo_yok > 0:
+            sonuc.append(f"\n⚠️ DİKKAT: En çok satan 10 üründen {top10_depo_yok} tanesinde DEPO STOK YOK!")
+    else:
+        sonuc.append("(Anlık stok/satış verisi yüklenmemiş)")
+    
+    # ========================================
+    # 4. KRİTİK DURUMLAR (Sadece büyük kategoriler)
+    # ========================================
+    sonuc.append("\n" + "=" * 55)
+    sonuc.append("⚠️ KRİTİK DURUMLAR (Ana Kategoriler)")
+    sonuc.append("=" * 55 + "\n")
+    
+    # Ana kategorilerdeki kritik durumlar
+    kritik_butce = [k for k in kategoriler if k['ciro_achieved'] < -15]
+    kritik_cover = [k for k in kategoriler if k['ty_cover'] > 12]
+    kritik_lfl = [k for k in kategoriler if k['lfl_ciro'] < -20]
+    kritik_marj = [k for k in kategoriler if k['ty_marj'] < k['ly_marj'] - 3]
+    
+    if kritik_butce:
+        sonuc.append(f"🔴 BÜTÇE ALTINDA ({len(kritik_butce)} kategori - sapma >%15):")
+        for kat in sorted(kritik_butce, key=lambda x: x['ciro_achieved'])[:5]:
+            sonuc.append(f"   • {kat['ad']}: Bütçe %{kat['ciro_achieved']:+.0f} (ciro payı %{kat['ciro_pay']:.1f})")
+        sonuc.append("")
+    
+    if kritik_cover:
+        sonuc.append(f"🔴 YÜKSEK COVER ({len(kritik_cover)} kategori - >12 hafta):")
+        for kat in sorted(kritik_cover, key=lambda x: x['ty_cover'], reverse=True)[:5]:
+            sonuc.append(f"   • {kat['ad']}: {kat['ty_cover']:.1f} hf → Stok eritme gerekli")
+        sonuc.append("")
+    
+    if kritik_lfl:
+        sonuc.append(f"🔴 CİDDİ KÜÇÜLME ({len(kritik_lfl)} kategori - LFL <-%20):")
+        for kat in sorted(kritik_lfl, key=lambda x: x['lfl_ciro'])[:5]:
+            sonuc.append(f"   • {kat['ad']}: LFL Ciro %{kat['lfl_ciro']:+.0f}")
+        sonuc.append("")
+    
+    if kritik_marj:
+        sonuc.append(f"🔴 MARJ BASKISI ({len(kritik_marj)} kategori - >3 puan düşüş):")
+        for kat in sorted(kritik_marj, key=lambda x: x['ty_marj'] - x['ly_marj'])[:5]:
+            degisim = kat['ty_marj'] - kat['ly_marj']
+            sonuc.append(f"   • {kat['ad']}: %{kat['ty_marj']:.0f} (GY: %{kat['ly_marj']:.0f}) → {degisim:+.1f} puan")
+        sonuc.append("")
+    
+    if not kritik_butce and not kritik_cover and not kritik_lfl and not kritik_marj:
+        sonuc.append("✅ Ana kategorilerde kritik durum yok.\n")
+    
+    # ========================================
+    # 5. İYİ GİDEN KATEGORİLER
+    # ========================================
+    iyi_gidenler = [k for k in kategoriler if k['ciro_achieved'] >= 0 and k['lfl_ciro'] >= 0]
+    if iyi_gidenler:
+        sonuc.append("✅ İYİ PERFORMANS GÖSTEREN KATEGORİLER:")
+        for kat in sorted(iyi_gidenler, key=lambda x: x['ciro_achieved'], reverse=True)[:3]:
+            sonuc.append(f"   • {kat['ad']}: Bütçe %{kat['ciro_achieved']:+.0f}, LFL %{kat['lfl_ciro']:+.0f}, Marj %{kat['ty_marj']:.0f}")
+    
+    # ========================================
+    # 6. ÖZET VE ÖNERİLER
+    # ========================================
+    sonuc.append("\n" + "-" * 55)
+    sonuc.append("💡 HAFTALIK DEĞERLENDİRME VE ÖNERİLER")
+    sonuc.append("-" * 55)
+    
+    # Genel durum
+    if avg_achieved >= 0:
+        sonuc.append("\n✅ Bütçe hedeflerine ulaşılmış durumda.")
+    elif avg_achieved >= -15:
+        sonuc.append(f"\n⚠️ Bütçenin %{abs(avg_achieved):.0f} altındayız - performans artırıcı aksiyonlar gerekli.")
+    else:
+        sonuc.append(f"\n🔴 Bütçenin %{abs(avg_achieved):.0f} altındayız - ACİL AKSİYON şart!")
+    
+    # Cover yorumu
+    if avg_ty_cover > 12:
+        sonuc.append(f"🔴 Ortalama cover {avg_ty_cover:.1f} hafta - stok eritme kampanyası başlatılmalı.")
+    elif avg_ty_cover > avg_ly_cover + 2:
+        sonuc.append(f"⚠️ Cover geçen yıla göre artmış ({avg_ly_cover:.1f} → {avg_ty_cover:.1f}) - satış hızlandırılmalı.")
+    
+    # Marj yorumu
+    if marj_degisim < -2:
+        sonuc.append(f"⚠️ Brüt marj {abs(marj_degisim):.1f} puan geriledi - fiyat/maliyet optimizasyonu gerekli.")
+    
+    # Spesifik öneriler
+    if kritik_butce:
+        en_kotu = min(kritik_butce, key=lambda x: x['ciro_achieved'])
+        sonuc.append(f"\n📌 ÖNCELİK 1: {en_kotu['ad']} - bütçenin %{abs(en_kotu['ciro_achieved']):.0f} altında")
+    
+    if kritik_cover:
+        en_yuksek = max(kritik_cover, key=lambda x: x['ty_cover'])
+        sonuc.append(f"📌 ÖNCELİK 2: {en_yuksek['kategori']} - {en_yuksek['ty_cover']:.0f} haftalık stok, eritme şart")
     
     return "\n".join(sonuc)
+
+
 def cover_analiz(kup: KupVeri, sayfa: str = None) -> str:
     """SC Tablosu cover grup analizi"""
     
@@ -1671,19 +1835,10 @@ TOOLS = [
     },
     {
         "name": "trading_analiz",
-        "description": "Trading raporunu 3 seviyeli hiyerarşi ile analiz eder. Parametre verilmezse şirket özeti + ana gruplar gösterir. ana_grup verilirse o grubun ara gruplarını, ana_grup+ara_grup verilirse mal gruplarını gösterir. Drill-down analiz için kullan.",
+        "description": "Trading raporunu analiz eder. Bütçe gerçekleştirme oranları, LFL (Like-for-Like) büyüme, kategori bazlı performans. Ana karar aracı - önce bunu çağır.",
         "input_schema": {
             "type": "object",
-            "properties": {
-                "ana_grup": {
-                    "type": "string",
-                    "description": "Ana grup adı (RENKLİ KOZMETİK, CİLT BAKIM, SAÇ BAKIM, PARFÜM vb). Boş bırakılırsa şirket özeti gösterir."
-                },
-                "ara_grup": {
-                    "type": "string",
-                    "description": "Ara grup adı (GÖZ ÜRÜNLERİ, YÜZ ÜRÜNLERİ, ŞAMPUAN vb). ana_grup ile birlikte kullanılır, mal grubu detayı gösterir."
-                }
-            },
+            "properties": {},
             "required": []
         }
     },
@@ -1944,11 +2099,7 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
                 if tool_name == "genel_ozet":
                     tool_result = genel_ozet(kup)
                 elif tool_name == "trading_analiz":
-                    tool_result = trading_analiz(
-                        kup,
-                        ana_grup=tool_input.get("ana_grup", None),
-                        ara_grup=tool_input.get("ara_grup", None)
-                    )
+                    tool_result = trading_analiz(kup)
                 elif tool_name == "cover_analiz":
                     tool_result = cover_analiz(kup, tool_input.get("sayfa", None))
                 elif tool_name == "ihtiyac_hesapla":
