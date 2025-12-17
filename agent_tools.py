@@ -129,6 +129,50 @@ class KupVeri:
                 print(f"SC dosyası okunamadı: {e}")
         
         # =====================================================================
+        # 5. COVER DİAGRAM (Excel) - Mağaza×AltGrup cover analizi
+        # =====================================================================
+        cover_files = glob.glob(os.path.join(self.veri_klasoru, "*Cover Diagram*")) + \
+                      glob.glob(os.path.join(self.veri_klasoru, "*cover*diagram*"))
+        
+        self.cover_diagram = pd.DataFrame()
+        if cover_files:
+            try:
+                self.cover_diagram = pd.read_excel(cover_files[0], sheet_name=0)
+                print(f"   ✅ Cover Diagram yüklendi: {len(self.cover_diagram)} satır")
+            except Exception as e:
+                print(f"   ⚠️ Cover Diagram okunamadı: {e}")
+        
+        # =====================================================================
+        # 6. KAPASİTE-PERFORMANS (Excel) - Mağaza doluluk analizi
+        # =====================================================================
+        kapasite_files = glob.glob(os.path.join(self.veri_klasoru, "*Kapasite*Periyod*")) + \
+                         glob.glob(os.path.join(self.veri_klasoru, "*kapasite*")) + \
+                         glob.glob(os.path.join(self.veri_klasoru, "*Özet Kapasite*"))
+        
+        self.kapasite = pd.DataFrame()
+        if kapasite_files:
+            try:
+                self.kapasite = pd.read_excel(kapasite_files[0], sheet_name=0)
+                print(f"   ✅ Kapasite yüklendi: {len(self.kapasite)} satır")
+            except Exception as e:
+                print(f"   ⚠️ Kapasite okunamadı: {e}")
+        
+        # =====================================================================
+        # 7. SİPARİŞ TAKİP (Excel) - Satınalma ve sipariş durumu
+        # =====================================================================
+        siparis_files = glob.glob(os.path.join(self.veri_klasoru, "*Sipariş*Takip*")) + \
+                        glob.glob(os.path.join(self.veri_klasoru, "*siparis*takip*")) + \
+                        glob.glob(os.path.join(self.veri_klasoru, "*Satınalma*"))
+        
+        self.siparis_takip = pd.DataFrame()
+        if siparis_files:
+            try:
+                self.siparis_takip = pd.read_excel(siparis_files[0], sheet_name=0)
+                print(f"   ✅ Sipariş Takip yüklendi: {len(self.siparis_takip)} satır")
+            except Exception as e:
+                print(f"   ⚠️ Sipariş Takip okunamadı: {e}")
+        
+        # =====================================================================
         # LOG
         # =====================================================================
         print(f"✅ Veri yüklendi:")
@@ -139,6 +183,9 @@ class KupVeri:
         print(f"   - KPI: {len(self.kpi):,} satır")
         print(f"   - Trading: {len(self.trading):,} satır")
         print(f"   - SC Sayfaları: {list(self.sc_sayfalari.keys())}")
+        print(f"   - Cover Diagram: {len(self.cover_diagram):,} satır")
+        print(f"   - Kapasite: {len(self.kapasite):,} satır")
+        print(f"   - Sipariş Takip: {len(self.siparis_takip):,} satır")
     
     def _hazirla(self):
         """Veriyi zenginleştir ve hesaplamalar yap"""
@@ -668,6 +715,390 @@ def cover_analiz(kup: KupVeri, sayfa: str = None) -> str:
                 sonuc.append(f"  {val}: {count} satır")
         except:
             pass
+    
+    return "\n".join(sonuc)
+
+
+def cover_diagram_analiz(kup: KupVeri, alt_grup: str = None, magaza: str = None) -> str:
+    """
+    Cover Diagram analizi - Mağaza×AltGrup cover analizi
+    
+    Kolonlar: Alt Grup, StoreName, Mağaza Sayısı, TY Back Cover, 
+              TY Avg Store Stock Unit, TY Sales Unit, TY Sales Value TRY,
+              Toplam Sipariş, LFL Stok Değişim, LFL Satış Değişim
+    """
+    
+    if len(kup.cover_diagram) == 0:
+        return "❌ Cover Diagram yüklenmemiş."
+    
+    df = kup.cover_diagram.copy()
+    kolonlar = list(df.columns)
+    
+    sonuc = []
+    sonuc.append("=" * 60)
+    sonuc.append("📊 COVER DİAGRAM ANALİZİ")
+    sonuc.append("=" * 60 + "\n")
+    
+    # Kolon mapping
+    def find_col(keywords):
+        for kol in kolonlar:
+            kol_lower = str(kol).lower()
+            if all(k in kol_lower for k in keywords):
+                return kol
+        return None
+    
+    col_alt_grup = find_col(['alt', 'grup']) or find_col(['grup'])
+    col_magaza = find_col(['store']) or find_col(['mağaza'])
+    col_cover = find_col(['cover']) or find_col(['back', 'cover'])
+    col_stok = find_col(['stock', 'unit']) or find_col(['stok'])
+    col_satis_adet = find_col(['sales', 'unit']) or find_col(['satış', 'adet'])
+    col_satis_tutar = find_col(['sales', 'value']) or find_col(['satış', 'tutar'])
+    col_siparis = find_col(['sipariş']) or find_col(['toplam', 'sip'])
+    col_lfl_stok = find_col(['lfl', 'stok']) or find_col(['stok', 'değişim'])
+    col_lfl_satis = find_col(['lfl', 'satış']) or find_col(['satış', 'değişim'])
+    
+    print(f"Cover Diagram kolonları: {kolonlar[:10]}")
+    
+    # Filtrele
+    if alt_grup:
+        df = df[df[col_alt_grup].astype(str).str.upper().str.contains(alt_grup.upper())]
+        sonuc.append(f"📁 Alt Grup Filtresi: {alt_grup}\n")
+    
+    if magaza:
+        df = df[df[col_magaza].astype(str).str.upper().str.contains(magaza.upper())]
+        sonuc.append(f"🏪 Mağaza Filtresi: {magaza}\n")
+    
+    if len(df) == 0:
+        return "❌ Filtreye uygun veri bulunamadı."
+    
+    # Parse fonksiyonu
+    def parse_val(val):
+        if pd.isna(val):
+            return 0
+        try:
+            return float(str(val).replace('%', '').replace(',', '.').strip())
+        except:
+            return 0
+    
+    # ÖZET ANALİZ
+    sonuc.append(f"📊 GENEL ÖZET ({len(df)} satır)")
+    sonuc.append("-" * 50)
+    
+    if col_cover:
+        df['_cover'] = df[col_cover].apply(parse_val)
+        avg_cover = df['_cover'].mean()
+        cover_yuksek = len(df[df['_cover'] > 12])
+        cover_dusuk = len(df[df['_cover'] < 4])
+        sonuc.append(f"   Cover Ortalama: {avg_cover:.1f} hafta")
+        sonuc.append(f"   🔴 Cover > 12 hafta: {cover_yuksek} satır")
+        sonuc.append(f"   ⚠️ Cover < 4 hafta: {cover_dusuk} satır")
+    
+    if col_lfl_satis:
+        df['_lfl_satis'] = df[col_lfl_satis].apply(parse_val)
+        avg_lfl = df['_lfl_satis'].mean()
+        lfl_neg = len(df[df['_lfl_satis'] < -20])
+        sonuc.append(f"   LFL Satış Ort: %{avg_lfl:+.1f}")
+        sonuc.append(f"   🔴 LFL < -%20: {lfl_neg} satır")
+    
+    # ALT GRUP BAZINDA ÖZET
+    if col_alt_grup and not alt_grup:
+        sonuc.append(f"\n📁 ALT GRUP BAZINDA COVER")
+        sonuc.append("-" * 50)
+        
+        grup_ozet = df.groupby(col_alt_grup).agg({
+            '_cover': 'mean' if '_cover' in df.columns else 'count'
+        }).sort_values('_cover', ascending=False).head(15)
+        
+        sonuc.append(f"{'Alt Grup':<30} {'Ort Cover':>10}")
+        sonuc.append("-" * 45)
+        for idx, row in grup_ozet.iterrows():
+            cover_emoji = "🔴" if row['_cover'] > 12 else ("⚠️" if row['_cover'] > 10 else "")
+            sonuc.append(f"{str(idx)[:29]:<30} {row['_cover']:>8.1f}hf {cover_emoji}")
+    
+    # MAĞAZA BAZINDA ÖZET
+    if col_magaza and not magaza:
+        sonuc.append(f"\n🏪 MAĞAZA BAZINDA COVER (En Yüksek 10)")
+        sonuc.append("-" * 50)
+        
+        mag_ozet = df.groupby(col_magaza).agg({
+            '_cover': 'mean'
+        }).sort_values('_cover', ascending=False).head(10)
+        
+        for idx, row in mag_ozet.iterrows():
+            cover_emoji = "🔴" if row['_cover'] > 12 else ""
+            sonuc.append(f"   {str(idx)[:30]}: {row['_cover']:.1f}hf {cover_emoji}")
+    
+    return "\n".join(sonuc)
+
+
+def kapasite_analiz(kup: KupVeri, magaza: str = None) -> str:
+    """
+    Kapasite-Performans analizi - Mağaza doluluk ve performans
+    
+    Kolonlar: StoreName, Karlı-Hızlı Metrik, Store Capacity dm3, Fiili Doluluk,
+              Nihai Doluluk, #Store Cover, LFL değişimler, Kar Marjı
+    """
+    
+    if len(kup.kapasite) == 0:
+        return "❌ Kapasite raporu yüklenmemiş."
+    
+    df = kup.kapasite.copy()
+    kolonlar = list(df.columns)
+    
+    sonuc = []
+    sonuc.append("=" * 60)
+    sonuc.append("📦 KAPASİTE VE PERFORMANS ANALİZİ")
+    sonuc.append("=" * 60 + "\n")
+    
+    # Kolon mapping
+    def find_col(keywords):
+        for kol in kolonlar:
+            kol_lower = str(kol).lower().replace('_', ' ')
+            if all(k in kol_lower for k in keywords):
+                return kol
+        return None
+    
+    col_magaza = find_col(['store']) or find_col(['mağaza']) or kolonlar[0]
+    col_karli_hizli = find_col(['karlı', 'hızlı']) or find_col(['metrik'])
+    col_kapasite = find_col(['capacity']) or find_col(['kapasite'])
+    col_fiili_doluluk = find_col(['fiili', 'doluluk'])
+    col_nihai_doluluk = find_col(['nihai', 'doluluk'])
+    col_cover = find_col(['cover'])
+    col_lfl_stok = find_col(['lfl', 'stok'])
+    col_lfl_satis_adet = find_col(['lfl', 'satış', 'adet'])
+    col_lfl_satis_tutar = find_col(['lfl', 'satış', 'tutar'])
+    col_kar_marj = find_col(['kar', 'marj']) or find_col(['marj'])
+    
+    print(f"Kapasite kolonları: {kolonlar[:10]}")
+    
+    # Filtrele
+    if magaza:
+        df = df[df[col_magaza].astype(str).str.upper().str.contains(magaza.upper())]
+        sonuc.append(f"🏪 Mağaza Filtresi: {magaza}\n")
+    
+    if len(df) == 0:
+        return "❌ Filtreye uygun mağaza bulunamadı."
+    
+    # Parse fonksiyonu
+    def parse_val(val):
+        if pd.isna(val):
+            return 0
+        try:
+            return float(str(val).replace('%', '').replace(',', '.').strip())
+        except:
+            return 0
+    
+    def parse_pct(val):
+        v = parse_val(val)
+        if -2 < v < 2 and v != 0:
+            return v * 100
+        return v
+    
+    # GENEL ÖZET
+    sonuc.append(f"📊 GENEL ÖZET ({len(df)} mağaza)")
+    sonuc.append("-" * 50)
+    
+    # Doluluk analizi
+    if col_fiili_doluluk:
+        df['_fiili'] = df[col_fiili_doluluk].apply(parse_pct)
+        avg_doluluk = df['_fiili'].mean()
+        dolu_fazla = len(df[df['_fiili'] > 90])
+        dolu_az = len(df[df['_fiili'] < 50])
+        sonuc.append(f"   Ortalama Doluluk: %{avg_doluluk:.0f}")
+        sonuc.append(f"   🔴 Doluluk > %90: {dolu_fazla} mağaza (TAŞIYOR)")
+        sonuc.append(f"   ⚠️ Doluluk < %50: {dolu_az} mağaza (BOŞ)")
+    
+    # Cover analizi
+    if col_cover:
+        df['_cover'] = df[col_cover].apply(parse_val)
+        avg_cover = df['_cover'].mean()
+        sonuc.append(f"   Ortalama Cover: {avg_cover:.1f} hafta")
+    
+    # LFL analizi
+    if col_lfl_satis_tutar:
+        df['_lfl_satis'] = df[col_lfl_satis_tutar].apply(parse_pct)
+        avg_lfl = df['_lfl_satis'].mean()
+        sonuc.append(f"   LFL Satış Ort: %{avg_lfl:+.1f}")
+    
+    # Kar marjı
+    if col_kar_marj:
+        df['_marj'] = df[col_kar_marj].apply(parse_pct)
+        avg_marj = df['_marj'].mean()
+        sonuc.append(f"   Ortalama Marj: %{avg_marj:.1f}")
+    
+    # KARLI-HIZLI DAĞILIM
+    if col_karli_hizli:
+        sonuc.append(f"\n📊 KARLI-HIZLI METRİK DAĞILIMI")
+        sonuc.append("-" * 50)
+        
+        metrik_dag = df[col_karli_hizli].value_counts()
+        for metrik, sayi in metrik_dag.items():
+            oran = sayi / len(df) * 100
+            emoji = "✅" if 'karlı' in str(metrik).lower() and 'hızlı' in str(metrik).lower() else ""
+            sonuc.append(f"   {metrik}: {sayi} mağaza (%{oran:.0f}) {emoji}")
+    
+    # EN DOLU MAĞAZALAR
+    if col_fiili_doluluk:
+        sonuc.append(f"\n🔴 EN DOLU MAĞAZALAR (Kapasite Sorunu)")
+        sonuc.append("-" * 50)
+        
+        en_dolu = df.nlargest(10, '_fiili')
+        sonuc.append(f"{'Mağaza':<35} {'Doluluk':>10} {'Cover':>8}")
+        sonuc.append("-" * 55)
+        for _, row in en_dolu.iterrows():
+            mag = str(row[col_magaza])[:34]
+            doluluk = row['_fiili']
+            cover = row.get('_cover', 0)
+            sonuc.append(f"{mag:<35} %{doluluk:>8.0f} {cover:>7.1f}hf")
+    
+    # EN PERFORMANSLI MAĞAZALAR
+    if col_lfl_satis_tutar and '_lfl_satis' in df.columns:
+        sonuc.append(f"\n✅ EN İYİ PERFORMANS (LFL Satış)")
+        sonuc.append("-" * 50)
+        
+        en_iyi = df.nlargest(10, '_lfl_satis')
+        for _, row in en_iyi.iterrows():
+            mag = str(row[col_magaza])[:30]
+            lfl = row['_lfl_satis']
+            sonuc.append(f"   {mag}: %{lfl:+.0f}")
+    
+    return "\n".join(sonuc)
+
+
+def siparis_takip_analiz(kup: KupVeri, ana_grup: str = None) -> str:
+    """
+    Sipariş Yerleştirme ve Satınalma Takip analizi
+    
+    Kolonlar: Ana Grup, Ara Grup, Alt Grup, Onaylı Alım Bütçe, Total Sipariş,
+              Depoya Giren, Bekleyen Sipariş, Depo Giriş oranları
+    """
+    
+    if len(kup.siparis_takip) == 0:
+        return "❌ Sipariş Takip raporu yüklenmemiş."
+    
+    df = kup.siparis_takip.copy()
+    kolonlar = list(df.columns)
+    
+    sonuc = []
+    sonuc.append("=" * 60)
+    sonuc.append("📦 SİPARİŞ VE SATINALMA TAKİP")
+    sonuc.append("=" * 60 + "\n")
+    
+    # Kolon mapping
+    def find_col(keywords, exclude=[]):
+        for kol in kolonlar:
+            kol_lower = str(kol).lower()
+            if all(k in kol_lower for k in keywords) and not any(e in kol_lower for e in exclude):
+                return kol
+        return None
+    
+    col_ana_grup = find_col(['ana', 'grup']) or find_col(['yeni', 'ana'])
+    col_ara_grup = find_col(['ara', 'grup'])
+    col_alt_grup = find_col(['alt', 'grup']) or find_col(['yeni', 'alt'])
+    col_alim_butce = find_col(['onaylı', 'alım', 'bütçe', 'tutar'], ['adet'])
+    col_siparis = find_col(['total', 'sipariş', 'tutar'], ['adet', 'hariç'])
+    col_depo_giren = find_col(['depoya', 'giren', 'tutar'], ['adet', 'hariç'])
+    col_bekleyen = find_col(['bekleyen', 'sipariş', 'tutar'], ['adet', 'hariç'])
+    col_gerceklesme = find_col(['depo', 'giriş', 'alım', 'bütçe', 'oran'])
+    
+    print(f"Sipariş Takip kolonları: {kolonlar[:10]}")
+    
+    # Filtrele
+    if ana_grup:
+        df = df[df[col_ana_grup].astype(str).str.upper().str.contains(ana_grup.upper())]
+        sonuc.append(f"📁 Ana Grup Filtresi: {ana_grup}\n")
+    
+    if len(df) == 0:
+        return "❌ Filtreye uygun veri bulunamadı."
+    
+    # Parse fonksiyonu
+    def parse_val(val):
+        if pd.isna(val):
+            return 0
+        try:
+            return float(str(val).replace('%', '').replace(',', '.').replace(' ', '').strip())
+        except:
+            return 0
+    
+    def parse_pct(val):
+        v = parse_val(val)
+        if -2 < v < 2 and v != 0:
+            return v * 100
+        return v
+    
+    # GENEL ÖZET
+    sonuc.append(f"📊 GENEL ÖZET ({len(df)} satır)")
+    sonuc.append("-" * 50)
+    
+    if col_alim_butce:
+        toplam_butce = df[col_alim_butce].apply(parse_val).sum()
+        sonuc.append(f"   Onaylı Alım Bütçe: {toplam_butce/1e6:,.1f}M TL")
+    
+    if col_siparis:
+        toplam_siparis = df[col_siparis].apply(parse_val).sum()
+        sonuc.append(f"   Total Sipariş: {toplam_siparis/1e6:,.1f}M TL")
+    
+    if col_depo_giren:
+        toplam_giren = df[col_depo_giren].apply(parse_val).sum()
+        sonuc.append(f"   Depoya Giren: {toplam_giren/1e6:,.1f}M TL")
+    
+    if col_bekleyen:
+        toplam_bekleyen = df[col_bekleyen].apply(parse_val).sum()
+        sonuc.append(f"   Bekleyen Sipariş: {toplam_bekleyen/1e6:,.1f}M TL")
+    
+    # Gerçekleşme oranı
+    if col_alim_butce and col_depo_giren:
+        butce = df[col_alim_butce].apply(parse_val).sum()
+        giren = df[col_depo_giren].apply(parse_val).sum()
+        if butce > 0:
+            oran = giren / butce * 100
+            emoji = "✅" if oran >= 80 else ("⚠️" if oran >= 60 else "🔴")
+            sonuc.append(f"   {emoji} Gerçekleşme Oranı: %{oran:.0f}")
+    
+    # ANA GRUP BAZINDA
+    if col_ana_grup and not ana_grup:
+        sonuc.append(f"\n📁 ANA GRUP BAZINDA SİPARİŞ DURUMU")
+        sonuc.append("-" * 60)
+        
+        # Grupla
+        df['_butce'] = df[col_alim_butce].apply(parse_val) if col_alim_butce else 0
+        df['_siparis'] = df[col_siparis].apply(parse_val) if col_siparis else 0
+        df['_giren'] = df[col_depo_giren].apply(parse_val) if col_depo_giren else 0
+        df['_bekleyen'] = df[col_bekleyen].apply(parse_val) if col_bekleyen else 0
+        
+        grup_ozet = df.groupby(col_ana_grup).agg({
+            '_butce': 'sum',
+            '_siparis': 'sum',
+            '_giren': 'sum',
+            '_bekleyen': 'sum'
+        }).sort_values('_butce', ascending=False)
+        
+        sonuc.append(f"{'Ana Grup':<25} {'Bütçe':>12} {'Sipariş':>12} {'Giren':>12} {'Bekleyen':>12} {'%Gerç':>8}")
+        sonuc.append("-" * 85)
+        
+        for idx, row in grup_ozet.head(12).iterrows():
+            grup = str(idx)[:24]
+            butce = row['_butce'] / 1e6
+            siparis = row['_siparis'] / 1e6
+            giren = row['_giren'] / 1e6
+            bekleyen = row['_bekleyen'] / 1e6
+            oran = (giren / butce * 100) if butce > 0 else 0
+            emoji = "✅" if oran >= 80 else ("⚠️" if oran >= 60 else "🔴")
+            sonuc.append(f"{grup:<25} {butce:>10.1f}M {siparis:>10.1f}M {giren:>10.1f}M {bekleyen:>10.1f}M {oran:>6.0f}% {emoji}")
+    
+    # BEKLEYEN SİPARİŞ UYARISI
+    if col_bekleyen:
+        df['_bekleyen'] = df[col_bekleyen].apply(parse_val)
+        bekleyen_yuksek = df[df['_bekleyen'] > df['_bekleyen'].quantile(0.9)]
+        
+        if len(bekleyen_yuksek) > 0:
+            sonuc.append(f"\n⚠️ YÜKSEK BEKLEYEN SİPARİŞ (Top 10)")
+            sonuc.append("-" * 50)
+            
+            for _, row in bekleyen_yuksek.nlargest(10, '_bekleyen').iterrows():
+                grup = str(row.get(col_alt_grup, row.get(col_ana_grup, 'N/A')))[:30]
+                bekleyen = row['_bekleyen'] / 1e6
+                sonuc.append(f"   {grup}: {bekleyen:.1f}M TL bekliyor")
     
     return "\n".join(sonuc)
 
@@ -1689,13 +2120,59 @@ TOOLS = [
     },
     {
         "name": "cover_analiz",
-        "description": "SC Tablosundan cover grup analizini yapar. Kategori × Cover Grup matrisi, stok dağılımı, marj analizi. Hangi cover grubunda sorun var gösterir.",
+        "description": "SC Tablosundan cover grup analizini yapar. (Eski format). Yeni format için cover_diagram_analiz kullan.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "sayfa": {
                     "type": "string",
                     "description": "Analiz edilecek SC sayfa adı. Boş bırakılırsa otomatik seçilir."
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "cover_diagram_analiz",
+        "description": "Cover Diagram raporunu analiz eder. Mağaza×AltGrup bazında cover analizi. Yüksek/düşük cover durumları, LFL değişimler. Alt grup veya mağaza filtresi ile detaya inebilir.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "alt_grup": {
+                    "type": "string",
+                    "description": "Alt grup filtresi (opsiyonel). Örn: 'MASKARA', 'ŞAMPUAN'"
+                },
+                "magaza": {
+                    "type": "string",
+                    "description": "Mağaza filtresi (opsiyonel). Örn: 'ANKARA', 'İSTANBUL'"
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "kapasite_analiz",
+        "description": "Kapasite-Performans raporunu analiz eder. Mağaza doluluk oranları, kapasite sorunları, Karlı-Hızlı metrik dağılımı, LFL performans. Taşan veya boş mağazaları tespit eder.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "magaza": {
+                    "type": "string",
+                    "description": "Mağaza filtresi (opsiyonel). Örn: 'ANKARA', 'KORUPARK'"
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "siparis_takip_analiz",
+        "description": "Sipariş Yerleştirme ve Satınalma Takip raporunu analiz eder. Onaylı bütçe, total sipariş, depoya giren, bekleyen sipariş. Satınalma gerçekleşme oranlarını gösterir.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "ana_grup": {
+                    "type": "string",
+                    "description": "Ana grup filtresi (opsiyonel). Örn: 'RENKLİ KOZMETİK', 'SAÇ BAKIM'"
                 }
             },
             "required": []
@@ -2012,6 +2489,22 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str, analiz_kur
                     )
                 elif tool_name == "cover_analiz":
                     tool_result = cover_analiz(kup, tool_input.get("sayfa", None))
+                elif tool_name == "cover_diagram_analiz":
+                    tool_result = cover_diagram_analiz(
+                        kup,
+                        alt_grup=tool_input.get("alt_grup", None),
+                        magaza=tool_input.get("magaza", None)
+                    )
+                elif tool_name == "kapasite_analiz":
+                    tool_result = kapasite_analiz(
+                        kup,
+                        magaza=tool_input.get("magaza", None)
+                    )
+                elif tool_name == "siparis_takip_analiz":
+                    tool_result = siparis_takip_analiz(
+                        kup,
+                        ana_grup=tool_input.get("ana_grup", None)
+                    )
                 elif tool_name == "ihtiyac_hesapla":
                     tool_result = ihtiyac_hesapla(kup, tool_input.get("limit", 30))
                 elif tool_name == "kategori_analiz":
