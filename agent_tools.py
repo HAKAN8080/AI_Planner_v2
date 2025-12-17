@@ -1871,8 +1871,11 @@ Hesaplama mantığı:
 Her zaman Türkçe, profesyonel ve stratejik ol!"""
 
 
-def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
-    """Agent'ı çalıştır ve sonuç al"""
+def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str, analiz_kurallari: dict = None) -> str:
+    """Agent'ı çalıştır ve sonuç al
+    
+    analiz_kurallari: Kullanıcının tanımladığı eşikler ve yorumlar
+    """
     
     import time
     start_time = time.time()
@@ -1886,6 +1889,55 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
     except Exception as e:
         print(f"   ❌ Client hatası: {e}")
         return f"❌ API Client hatası: {str(e)}"
+    
+    # Dinamik SYSTEM_PROMPT oluştur
+    system_prompt = SYSTEM_PROMPT
+    
+    if analiz_kurallari:
+        kural_eki = "\n\n## 📋 KULLANICI TANIMI ANALİZ KURALLARI\n"
+        
+        # Analiz sırası
+        if analiz_kurallari.get('analiz_sirasi'):
+            kural_eki += f"\n### Analiz Sırası:\n"
+            for i, analiz in enumerate(analiz_kurallari['analiz_sirasi'], 1):
+                kural_eki += f"{i}. {analiz}\n"
+        
+        # Eşikler
+        esikler = analiz_kurallari.get('esikler', {})
+        if esikler:
+            kural_eki += f"\n### Kritik Eşikler (Bu değerleri kullan!):\n"
+            kural_eki += f"- Cover > {esikler.get('cover_yuksek', 12)} hafta → 🔴 YÜKSEK COVER, stok eritme gerekli\n"
+            kural_eki += f"- Cover < {esikler.get('cover_dusuk', 4)} hafta → 🔴 DÜŞÜK COVER, sevkiyat gerekli\n"
+            kural_eki += f"- Bütçe sapması > %{esikler.get('butce_sapma', 15)} → 🔴 KRİTİK bütçe altında\n"
+            kural_eki += f"- LFL düşüş > %{esikler.get('lfl_dusus', 20)} → 🔴 CİDDİ küçülme\n"
+            kural_eki += f"- Marj düşüşü > {esikler.get('marj_dusus', 3)} puan → 🔴 MARJ baskısı\n"
+            kural_eki += f"- Stok/Ciro oranı > {esikler.get('stok_fazla', 1.3)} → ⚠️ Stok fazlası, ERİTME gerekli\n"
+            kural_eki += f"- Stok/Ciro oranı < {esikler.get('stok_az', 0.7)} → ⚠️ Stok az, SEVKİYAT gerekli\n"
+        
+        # Yorumlar
+        yorumlar = analiz_kurallari.get('yorumlar', {})
+        if yorumlar:
+            kural_eki += f"\n### Yorum Kuralları (Bu önerileri yap!):\n"
+            if yorumlar.get('cover_yuksek'):
+                kural_eki += f"- Cover yüksekse: {yorumlar['cover_yuksek']}\n"
+            if yorumlar.get('butce_dusuk'):
+                kural_eki += f"- Bütçe düşükse: {yorumlar['butce_dusuk']}\n"
+            if yorumlar.get('marj_dusuk'):
+                kural_eki += f"- Marj düşüşü varsa: {yorumlar['marj_dusuk']}\n"
+            if yorumlar.get('lfl_negatif'):
+                kural_eki += f"- LFL negatifse: {yorumlar['lfl_negatif']}\n"
+        
+        # Öncelik sırası
+        if analiz_kurallari.get('oncelik_sirasi'):
+            kural_eki += f"\n### Raporlama Önceliği:\n"
+            kural_eki += f"Şu sırayla raporla: {', '.join(analiz_kurallari['oncelik_sirasi'])}\n"
+        
+        # Ek talimatlar
+        if analiz_kurallari.get('ek_talimatlar'):
+            kural_eki += f"\n### Ek Talimatlar:\n{analiz_kurallari['ek_talimatlar']}\n"
+        
+        system_prompt = SYSTEM_PROMPT + kural_eki
+        print(f"   📋 Analiz kuralları eklendi ({len(kural_eki)} karakter)")
     
     messages = [{"role": "user", "content": kullanici_mesaji}]
     
@@ -1908,7 +1960,7 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str) -> str:
             response = client.messages.create(
                 model="claude-sonnet-4-20250514",
                 max_tokens=2048,  # 1024'ten 2048'e çıkardım
-                system=SYSTEM_PROMPT,
+                system=system_prompt,
                 tools=TOOLS,
                 messages=messages
             )
