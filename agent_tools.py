@@ -1854,6 +1854,15 @@ Sadece büyük kategorilerdeki sorunlara odaklan.
 - Sadece önemli sapmaları vurgula
 - Aksiyon öner
 - Büyük kategorilere odaklan
+- **DETAYLI ve KAPSAMLI yanıtlar ver** - kısa kesme, derinlemesine analiz yap
+- Her kategorinin NEDEN iyi/kötü gittiğini açıkla
+- Birden fazla tool kullanarak cross-check yap
+
+## 📏 YANIT UZUNLUĞU
+- Genel analiz soruları için EN AZ 500 kelime
+- Her ana kategori için yorum yap
+- Kritik bulguları detaylandır
+- Aksiyon önerilerini somutlaştır (hangi ürün, hangi mağaza, ne kadar)
 
 ## SEVKİYAT HESAPLAMA
 "Sevkiyat yap", "sevk planı" denildiğinde → sevkiyat_hesapla tool'unu kullan.
@@ -1959,7 +1968,7 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str, analiz_kur
         try:
             response = client.messages.create(
                 model="claude-sonnet-4-20250514",
-                max_tokens=2048,  # 1024'ten 2048'e çıkardım
+                max_tokens=4096,  # Daha uzun yanıtlar için artırıldı
                 system=system_prompt,
                 tools=TOOLS,
                 messages=messages
