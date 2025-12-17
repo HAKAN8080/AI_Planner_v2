@@ -233,6 +233,119 @@ with st.sidebar:
     
     st.markdown("---")
     
+    # ================================================================
+    # 📋 ANALİZ KURALLARI - AI EĞİTİM PANELİ
+    # ================================================================
+    st.subheader("📋 Analiz Kuralları")
+    
+    with st.expander("⚙️ AI Eğitim Ayarları", expanded=False):
+        
+        # --- ANALİZ SIRASI ---
+        st.markdown("**📊 Analiz Sırası**")
+        analiz_sirasi = st.multiselect(
+            "Sırayla hangi analizler yapılsın?",
+            options=["Trading Analiz", "Cover Analiz", "Sevkiyat Kontrolü", "Stok/Ciro Dengesi"],
+            default=["Trading Analiz", "Cover Analiz"],
+            help="AI bu sırayla analiz yapacak"
+        )
+        
+        st.markdown("---")
+        
+        # --- UYARI EŞİKLERİ ---
+        st.markdown("**⚠️ Uyarı Eşikleri**")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            esik_cover_yuksek = st.number_input("Cover Yüksek (hafta)", min_value=6, max_value=20, value=12, help="Bu değerin üstü 🔴 uyarı")
+            esik_cover_dusuk = st.number_input("Cover Düşük (hafta)", min_value=1, max_value=8, value=4, help="Bu değerin altı 🔴 sevkiyat gerek")
+        with col2:
+            esik_butce_sapma = st.number_input("Bütçe Sapma (%)", min_value=5, max_value=30, value=15, help="Bu yüzdenin altı 🔴 kritik")
+            esik_lfl_dusus = st.number_input("LFL Düşüş (%)", min_value=5, max_value=40, value=20, help="Bu yüzdenin altı 🔴 ciddi küçülme")
+        
+        esik_marj_dusus = st.number_input("Marj Düşüşü (puan)", min_value=1, max_value=10, value=3, help="Geçen yıla göre bu kadar puan düşüş 🔴")
+        
+        st.markdown("---")
+        
+        # --- STOK/CİRO DENGESİ ---
+        st.markdown("**📦 Stok/Ciro Dengesi**")
+        col1, col2 = st.columns(2)
+        with col1:
+            esik_stok_fazla = st.slider("Stok Fazlası Oranı", 1.0, 2.0, 1.3, 0.1, help="Stok payı / Ciro payı > bu değer ise 'ERİTME gerekli'")
+        with col2:
+            esik_stok_az = st.slider("Stok Azlığı Oranı", 0.3, 1.0, 0.7, 0.1, help="Stok payı / Ciro payı < bu değer ise 'SEVKİYAT gerekli'")
+        
+        st.markdown("---")
+        
+        # --- YORUM KURALLARI ---
+        st.markdown("**💬 Yorum Kuralları**")
+        
+        yorum_cover_yuksek = st.text_input(
+            "Cover yüksekse:",
+            value="Stok eritme kampanyası başlat, indirim planla",
+            help="AI bu yorumu yapacak"
+        )
+        yorum_butce_dusuk = st.text_input(
+            "Bütçe düşükse:",
+            value="Satış hızlandırıcı aksiyonlar gerekli, kampanya planla",
+            help="AI bu yorumu yapacak"
+        )
+        yorum_marj_dusuk = st.text_input(
+            "Marj düşüşü varsa:",
+            value="Fiyat/maliyet analizi yap, tedarikçi görüşmesi öner",
+            help="AI bu yorumu yapacak"
+        )
+        yorum_lfl_negatif = st.text_input(
+            "LFL negatifse:",
+            value="Kategori performans analizi yap, rakip araştırması öner",
+            help="AI bu yorumu yapacak"
+        )
+        
+        st.markdown("---")
+        
+        # --- ÖNCELİK SIRASI ---
+        st.markdown("**🎯 Raporlama Önceliği**")
+        oncelik_sirasi = st.multiselect(
+            "Raporda önce hangi metrikler gösterilsin?",
+            options=["Bütçe Gerçekleşme", "Cover", "LFL Ciro", "LFL Adet", "Marj", "Fiyat Artışı"],
+            default=["Bütçe Gerçekleşme", "Cover", "LFL Ciro"],
+            help="AI bu sırayla raporlayacak"
+        )
+        
+        # --- EK TALİMATLAR ---
+        st.markdown("**📝 Ek Talimatlar**")
+        ek_talimatlar = st.text_area(
+            "AI'ya özel talimatlar:",
+            value="Her zaman önce şirket toplamına bak, sonra kategorilere in. Kritik durumları vurgula.",
+            height=80,
+            help="Serbest metin - AI bu talimatlara uyacak"
+        )
+        
+        # Session state'e kaydet
+        st.session_state['analiz_kurallari'] = {
+            'analiz_sirasi': analiz_sirasi,
+            'esikler': {
+                'cover_yuksek': esik_cover_yuksek,
+                'cover_dusuk': esik_cover_dusuk,
+                'butce_sapma': esik_butce_sapma,
+                'lfl_dusus': esik_lfl_dusus,
+                'marj_dusus': esik_marj_dusus,
+                'stok_fazla': esik_stok_fazla,
+                'stok_az': esik_stok_az
+            },
+            'yorumlar': {
+                'cover_yuksek': yorum_cover_yuksek,
+                'butce_dusuk': yorum_butce_dusuk,
+                'marj_dusuk': yorum_marj_dusuk,
+                'lfl_negatif': yorum_lfl_negatif
+            },
+            'oncelik_sirasi': oncelik_sirasi,
+            'ek_talimatlar': ek_talimatlar
+        }
+        
+        st.success("✅ Kurallar kaydedildi")
+    
+    st.markdown("---")
+    
     # Hızlı Komutlar
     st.subheader("⚡ Hızlı Komutlar")
     
@@ -291,10 +404,14 @@ if mesaj:
                 from agent_tools import agent_calistir
                 import traceback
                 
+                # Analiz kurallarını al
+                analiz_kurallari = st.session_state.get('analiz_kurallari', None)
+                
                 sonuc = agent_calistir(
                     api_key,
                     st.session_state['kup'],
-                    mesaj
+                    mesaj,
+                    analiz_kurallari=analiz_kurallari
                 )
                 
                 if sonuc and len(sonuc.strip()) > 0:
