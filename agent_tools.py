@@ -856,9 +856,7 @@ def cover_diagram_analiz(kup: KupVeri, alt_grup: str = None, magaza: str = None)
 def kapasite_analiz(kup: KupVeri, magaza: str = None) -> str:
     """
     Kapasite-Performans analizi - Mağaza doluluk ve performans
-    
-    Kolonlar: StoreName, Karlı-Hızlı Metrik, Store Capacity dm3, Fiili Doluluk,
-              Nihai Doluluk, #Store Cover, LFL değişimler, Kar Marjı
+    DETAYLI ANALİZ: Doluluk aralıkları, stok/satış adetleri, en dolu/boş mağazalar
     """
     
     if len(kup.kapasite) == 0:
@@ -868,30 +866,33 @@ def kapasite_analiz(kup: KupVeri, magaza: str = None) -> str:
     kolonlar = list(df.columns)
     
     sonuc = []
-    sonuc.append("=" * 60)
-    sonuc.append("📦 KAPASİTE VE PERFORMANS ANALİZİ")
-    sonuc.append("=" * 60 + "\n")
+    sonuc.append("=" * 70)
+    sonuc.append("📦 MAĞAZA KAPASİTE VE PERFORMANS ANALİZİ")
+    sonuc.append("=" * 70 + "\n")
     
-    # Kolon mapping
+    # Kolon mapping - daha esnek
     def find_col(keywords):
         for kol in kolonlar:
-            kol_lower = str(kol).lower().replace('_', ' ')
+            kol_lower = str(kol).lower().replace('_', ' ').replace('#', '')
             if all(k in kol_lower for k in keywords):
                 return kol
         return None
     
     col_magaza = find_col(['store']) or find_col(['mağaza']) or kolonlar[0]
-    col_karli_hizli = find_col(['karlı', 'hızlı']) or find_col(['metrik'])
-    col_kapasite = find_col(['capacity']) or find_col(['kapasite'])
+    col_karli_hizli = find_col(['karlı']) or find_col(['hızlı']) or find_col(['metrik'])
+    col_kapasite_dm3 = find_col(['capacity', 'dm3']) or find_col(['kapasite'])
     col_fiili_doluluk = find_col(['fiili', 'doluluk'])
     col_nihai_doluluk = find_col(['nihai', 'doluluk'])
-    col_cover = find_col(['cover'])
+    col_cover = find_col(['store', 'cover']) or find_col(['cover'])
+    col_stok_adet = find_col(['avg', 'store', 'stock', 'unit']) or find_col(['stok', 'adet'])
+    col_satis_adet = find_col(['sales', 'unit']) or find_col(['satış', 'adet'])
+    col_satis_tutar = find_col(['sales', 'value']) or find_col(['satış', 'tutar'])
     col_lfl_stok = find_col(['lfl', 'stok'])
     col_lfl_satis_adet = find_col(['lfl', 'satış', 'adet'])
     col_lfl_satis_tutar = find_col(['lfl', 'satış', 'tutar'])
     col_kar_marj = find_col(['kar', 'marj']) or find_col(['marj'])
     
-    print(f"Kapasite kolonları: {kolonlar[:10]}")
+    print(f"Kapasite kolonları bulundu: magaza={col_magaza}, doluluk={col_fiili_doluluk}, cover={col_cover}, stok={col_stok_adet}, satis={col_satis_adet}")
     
     # Filtrele
     if magaza:
@@ -901,7 +902,7 @@ def kapasite_analiz(kup: KupVeri, magaza: str = None) -> str:
     if len(df) == 0:
         return "❌ Filtreye uygun mağaza bulunamadı."
     
-    # Parse fonksiyonu
+    # Parse fonksiyonları
     def parse_val(val):
         if pd.isna(val):
             return 0
@@ -916,73 +917,205 @@ def kapasite_analiz(kup: KupVeri, magaza: str = None) -> str:
             return v * 100
         return v
     
-    # GENEL ÖZET
-    sonuc.append(f"📊 GENEL ÖZET ({len(df)} mağaza)")
-    sonuc.append("-" * 50)
-    
-    # Doluluk analizi
+    # Kolonları parse et
     if col_fiili_doluluk:
         df['_fiili'] = df[col_fiili_doluluk].apply(parse_pct)
-        avg_doluluk = df['_fiili'].mean()
-        dolu_fazla = len(df[df['_fiili'] > 90])
-        dolu_az = len(df[df['_fiili'] < 50])
-        sonuc.append(f"   Ortalama Doluluk: %{avg_doluluk:.0f}")
-        sonuc.append(f"   🔴 Doluluk > %90: {dolu_fazla} mağaza (TAŞIYOR)")
-        sonuc.append(f"   ⚠️ Doluluk < %50: {dolu_az} mağaza (BOŞ)")
-    
-    # Cover analizi
     if col_cover:
         df['_cover'] = df[col_cover].apply(parse_val)
+    if col_stok_adet:
+        df['_stok_adet'] = df[col_stok_adet].apply(parse_val)
+    if col_satis_adet:
+        df['_satis_adet'] = df[col_satis_adet].apply(parse_val)
+    if col_satis_tutar:
+        df['_satis_tutar'] = df[col_satis_tutar].apply(parse_val)
+    if col_lfl_satis_tutar:
+        df['_lfl_satis'] = df[col_lfl_satis_tutar].apply(parse_pct)
+    if col_kar_marj:
+        df['_marj'] = df[col_kar_marj].apply(parse_pct)
+    
+    # =========================================
+    # 1. GENEL ÖZET
+    # =========================================
+    toplam_magaza = len(df)
+    sonuc.append(f"📊 GENEL ÖZET")
+    sonuc.append("-" * 60)
+    sonuc.append(f"   Toplam Mağaza Sayısı: {toplam_magaza}")
+    
+    if '_fiili' in df.columns:
+        avg_doluluk = df['_fiili'].mean()
+        sonuc.append(f"   Ortalama Doluluk: %{avg_doluluk:.1f}")
+    
+    if '_cover' in df.columns:
         avg_cover = df['_cover'].mean()
         sonuc.append(f"   Ortalama Cover: {avg_cover:.1f} hafta")
     
-    # LFL analizi
-    if col_lfl_satis_tutar:
-        df['_lfl_satis'] = df[col_lfl_satis_tutar].apply(parse_pct)
-        avg_lfl = df['_lfl_satis'].mean()
-        sonuc.append(f"   LFL Satış Ort: %{avg_lfl:+.1f}")
+    if '_stok_adet' in df.columns:
+        toplam_stok = df['_stok_adet'].sum()
+        avg_stok = df['_stok_adet'].mean()
+        sonuc.append(f"   Toplam Stok: {toplam_stok:,.0f} adet")
+        sonuc.append(f"   Mağaza Başı Ort. Stok: {avg_stok:,.0f} adet")
     
-    # Kar marjı
-    if col_kar_marj:
-        df['_marj'] = df[col_kar_marj].apply(parse_pct)
+    if '_satis_adet' in df.columns:
+        toplam_satis = df['_satis_adet'].sum()
+        avg_satis = df['_satis_adet'].mean()
+        sonuc.append(f"   Toplam Satış: {toplam_satis:,.0f} adet")
+        sonuc.append(f"   Mağaza Başı Ort. Satış: {avg_satis:,.0f} adet")
+    
+    if '_satis_tutar' in df.columns:
+        toplam_ciro = df['_satis_tutar'].sum()
+        avg_ciro = df['_satis_tutar'].mean()
+        sonuc.append(f"   Toplam Ciro: {toplam_ciro/1e6:,.1f}M TL")
+        sonuc.append(f"   Mağaza Başı Ort. Ciro: {avg_ciro/1e3:,.0f}K TL")
+    
+    if '_marj' in df.columns:
         avg_marj = df['_marj'].mean()
         sonuc.append(f"   Ortalama Marj: %{avg_marj:.1f}")
     
-    # KARLI-HIZLI DAĞILIM
+    # =========================================
+    # 2. DOLULUK ARALIKLARI DAĞILIMI
+    # =========================================
+    if '_fiili' in df.columns:
+        sonuc.append(f"\n📊 DOLULUK ARALIKLARI DAĞILIMI")
+        sonuc.append("-" * 70)
+        
+        # Aralıkları tanımla
+        araliklar = [
+            (90, 999, "🔴 >%90 (TAŞIYOR)", "tasiyor"),
+            (70, 90, "✅ %70-90 (OPTİMAL)", "optimal"),
+            (50, 70, "⚠️ %50-70 (ORTA)", "orta"),
+            (0, 50, "🔴 <%50 (BOŞ)", "bos")
+        ]
+        
+        sonuc.append(f"{'Doluluk Aralığı':<25} {'Mağaza':>8} {'%Dağılım':>10} {'Stok%':>10} {'Cover':>8}")
+        sonuc.append("-" * 70)
+        
+        toplam_stok_all = df['_stok_adet'].sum() if '_stok_adet' in df.columns else 1
+        
+        for alt, ust, label, _ in araliklar:
+            mask = (df['_fiili'] >= alt) & (df['_fiili'] < ust)
+            subset = df[mask]
+            mag_sayi = len(subset)
+            mag_pct = mag_sayi / toplam_magaza * 100
+            
+            if '_stok_adet' in df.columns and toplam_stok_all > 0:
+                stok_pct = subset['_stok_adet'].sum() / toplam_stok_all * 100
+            else:
+                stok_pct = 0
+            
+            if '_cover' in df.columns and len(subset) > 0:
+                cover_avg = subset['_cover'].mean()
+            else:
+                cover_avg = 0
+            
+            sonuc.append(f"{label:<25} {mag_sayi:>8} {mag_pct:>9.1f}% {stok_pct:>9.1f}% {cover_avg:>7.1f}hf")
+    
+    # =========================================
+    # 3. EN DOLU 5 MAĞAZA (Kapasite Sorunu)
+    # =========================================
+    if '_fiili' in df.columns:
+        sonuc.append(f"\n🔴 EN DOLU 5 MAĞAZA (Kapasite Sorunu - Taşıyor)")
+        sonuc.append("-" * 80)
+        
+        en_dolu = df.nlargest(5, '_fiili')
+        sonuc.append(f"{'Mağaza':<30} {'Doluluk':>10} {'Stok':>12} {'Satış':>12} {'Cover':>8}")
+        sonuc.append("-" * 80)
+        
+        for _, row in en_dolu.iterrows():
+            mag = str(row[col_magaza])[:29]
+            doluluk = row.get('_fiili', 0)
+            stok = row.get('_stok_adet', 0)
+            satis = row.get('_satis_adet', 0)
+            cover = row.get('_cover', 0)
+            sonuc.append(f"{mag:<30} %{doluluk:>8.0f} {stok:>11,.0f} {satis:>11,.0f} {cover:>7.1f}hf")
+    
+    # =========================================
+    # 4. EN BOŞ 5 MAĞAZA (Ürün Eksikliği)
+    # =========================================
+    if '_fiili' in df.columns:
+        sonuc.append(f"\n⚠️ EN BOŞ 5 MAĞAZA (Ürün Eksikliği - Sevkiyat Gerekli)")
+        sonuc.append("-" * 80)
+        
+        en_bos = df.nsmallest(5, '_fiili')
+        sonuc.append(f"{'Mağaza':<30} {'Doluluk':>10} {'Stok':>12} {'Satış':>12} {'Cover':>8}")
+        sonuc.append("-" * 80)
+        
+        for _, row in en_bos.iterrows():
+            mag = str(row[col_magaza])[:29]
+            doluluk = row.get('_fiili', 0)
+            stok = row.get('_stok_adet', 0)
+            satis = row.get('_satis_adet', 0)
+            cover = row.get('_cover', 0)
+            sonuc.append(f"{mag:<30} %{doluluk:>8.0f} {stok:>11,.0f} {satis:>11,.0f} {cover:>7.1f}hf")
+    
+    # =========================================
+    # 5. KARLI-HIZLI METRİK DAĞILIMI
+    # =========================================
     if col_karli_hizli:
         sonuc.append(f"\n📊 KARLI-HIZLI METRİK DAĞILIMI")
-        sonuc.append("-" * 50)
+        sonuc.append("-" * 70)
         
-        metrik_dag = df[col_karli_hizli].value_counts()
-        for metrik, sayi in metrik_dag.items():
-            oran = sayi / len(df) * 100
+        metrik_dag = df.groupby(col_karli_hizli).agg({
+            col_magaza: 'count',
+            '_stok_adet': 'sum' if '_stok_adet' in df.columns else 'count',
+            '_satis_adet': 'sum' if '_satis_adet' in df.columns else 'count'
+        }).rename(columns={col_magaza: 'magaza_sayisi'})
+        
+        sonuc.append(f"{'Metrik':<25} {'Mağaza':>8} {'%Dağılım':>10} {'Stok':>15} {'Satış':>15}")
+        sonuc.append("-" * 75)
+        
+        for metrik, row in metrik_dag.iterrows():
+            mag_sayi = row['magaza_sayisi']
+            mag_pct = mag_sayi / toplam_magaza * 100
+            stok = row.get('_stok_adet', 0)
+            satis = row.get('_satis_adet', 0)
             emoji = "✅" if 'karlı' in str(metrik).lower() and 'hızlı' in str(metrik).lower() else ""
-            sonuc.append(f"   {metrik}: {sayi} mağaza (%{oran:.0f}) {emoji}")
+            sonuc.append(f"{str(metrik)[:24]:<25} {mag_sayi:>8} {mag_pct:>9.1f}% {stok:>14,.0f} {satis:>14,.0f} {emoji}")
     
-    # EN DOLU MAĞAZALAR
-    if col_fiili_doluluk:
-        sonuc.append(f"\n🔴 EN DOLU MAĞAZALAR (Kapasite Sorunu)")
-        sonuc.append("-" * 50)
+    # =========================================
+    # 6. EN İYİ PERFORMANS (LFL Satış)
+    # =========================================
+    if '_lfl_satis' in df.columns:
+        sonuc.append(f"\n✅ EN İYİ PERFORMANS - TOP 5 (LFL Satış Büyümesi)")
+        sonuc.append("-" * 60)
         
-        en_dolu = df.nlargest(10, '_fiili')
-        sonuc.append(f"{'Mağaza':<35} {'Doluluk':>10} {'Cover':>8}")
-        sonuc.append("-" * 55)
-        for _, row in en_dolu.iterrows():
-            mag = str(row[col_magaza])[:34]
-            doluluk = row['_fiili']
-            cover = row.get('_cover', 0)
-            sonuc.append(f"{mag:<35} %{doluluk:>8.0f} {cover:>7.1f}hf")
-    
-    # EN PERFORMANSLI MAĞAZALAR
-    if col_lfl_satis_tutar and '_lfl_satis' in df.columns:
-        sonuc.append(f"\n✅ EN İYİ PERFORMANS (LFL Satış)")
-        sonuc.append("-" * 50)
-        
-        en_iyi = df.nlargest(10, '_lfl_satis')
+        en_iyi = df.nlargest(5, '_lfl_satis')
         for _, row in en_iyi.iterrows():
             mag = str(row[col_magaza])[:30]
             lfl = row['_lfl_satis']
-            sonuc.append(f"   {mag}: %{lfl:+.0f}")
+            doluluk = row.get('_fiili', 0)
+            sonuc.append(f"   {mag}: LFL %{lfl:+.0f}, Doluluk %{doluluk:.0f}")
+    
+    # =========================================
+    # 7. EN KÖTÜ PERFORMANS (LFL Satış)
+    # =========================================
+    if '_lfl_satis' in df.columns:
+        sonuc.append(f"\n🔴 EN KÖTÜ PERFORMANS - TOP 5 (LFL Satış Düşüşü)")
+        sonuc.append("-" * 60)
+        
+        en_kotu = df.nsmallest(5, '_lfl_satis')
+        for _, row in en_kotu.iterrows():
+            mag = str(row[col_magaza])[:30]
+            lfl = row['_lfl_satis']
+            doluluk = row.get('_fiili', 0)
+            sonuc.append(f"   {mag}: LFL %{lfl:+.0f}, Doluluk %{doluluk:.0f}")
+    
+    # =========================================
+    # 8. ÖZET DEĞERLENDİRME
+    # =========================================
+    sonuc.append(f"\n📋 ÖZET DEĞERLENDİRME")
+    sonuc.append("-" * 60)
+    
+    if '_fiili' in df.columns:
+        tasiyan = len(df[df['_fiili'] > 90])
+        bos = len(df[df['_fiili'] < 50])
+        
+        if tasiyan > 0:
+            sonuc.append(f"   🔴 {tasiyan} mağaza taşıyor (>%90) - Kapasite artışı veya stok transferi gerekli")
+        if bos > 0:
+            sonuc.append(f"   ⚠️ {bos} mağaza boş (<%50) - Sevkiyat planlaması gerekli")
+        
+        optimal = len(df[(df['_fiili'] >= 70) & (df['_fiili'] <= 90)])
+        sonuc.append(f"   ✅ {optimal} mağaza optimal seviyede (%70-90)")
     
     return "\n".join(sonuc)
 
