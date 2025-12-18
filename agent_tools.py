@@ -1111,18 +1111,42 @@ def web_arama(sorgu: str) -> str:
     """
     Web'den güncel bilgi arar - Enflasyon, sektör verileri, ekonomik göstergeler
     DuckDuckGo ücretsiz API kullanır
+    Tarih parametrik: Yıl = bu yıl, Ay = bu ay - 1
     """
     import urllib.request
     import urllib.parse
     import json
+    from datetime import datetime
+    
+    # Dinamik tarih hesapla (bu ay - 1)
+    simdi = datetime.now()
+    if simdi.month == 1:
+        sorgu_yil = simdi.year - 1
+        sorgu_ay = 12
+    else:
+        sorgu_yil = simdi.year
+        sorgu_ay = simdi.month - 1
+    
+    ay_isimleri = {
+        1: "Ocak", 2: "Şubat", 3: "Mart", 4: "Nisan", 5: "Mayıs", 6: "Haziran",
+        7: "Temmuz", 8: "Ağustos", 9: "Eylül", 10: "Ekim", 11: "Kasım", 12: "Aralık"
+    }
+    sorgu_ay_adi = ay_isimleri[sorgu_ay]
+    
+    # Sorguya tarih ekle (eğer yoksa)
+    if str(sorgu_yil) not in sorgu and sorgu_ay_adi.lower() not in sorgu.lower():
+        sorgu_with_date = f"{sorgu} {sorgu_ay_adi} {sorgu_yil}"
+    else:
+        sorgu_with_date = sorgu
     
     sonuc = []
-    sonuc.append(f"🔍 WEB ARAMA: {sorgu}")
+    sonuc.append(f"🔍 WEB ARAMA: {sorgu_with_date}")
+    sonuc.append(f"📅 Referans Dönem: {sorgu_ay_adi} {sorgu_yil}")
     sonuc.append("-" * 50)
     
     try:
         # DuckDuckGo Instant Answer API
-        encoded_query = urllib.parse.quote(sorgu)
+        encoded_query = urllib.parse.quote(sorgu_with_date)
         url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1"
         
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -1145,22 +1169,21 @@ def web_arama(sorgu: str) -> str:
         # Eğer sonuç yoksa, basit bir mesaj
         if not data.get('Abstract') and not data.get('RelatedTopics'):
             sonuc.append(f"\n⚠️ Direkt sonuç bulunamadı.")
-            sonuc.append(f"Sorgu: {sorgu}")
-            sonuc.append(f"\n💡 Manuel referans değerleri (Aralık 2024):")
-            sonuc.append(f"   • Türkiye TÜFE (yıllık): ~%47")
-            sonuc.append(f"   • Kozmetik sektör büyümesi: ~%35-40")
+            sonuc.append(f"\n💡 Manuel referans değerleri ({sorgu_ay_adi} {sorgu_yil}):")
+            sonuc.append(f"   • Türkiye TÜFE (yıllık): ~%45-50")
+            sonuc.append(f"   • Kozmetik sektör büyümesi: ~%30-40")
             sonuc.append(f"   • USD/TRY: ~34-35 TL")
-            sonuc.append(f"   • Perakende büyümesi: ~%25-30")
-        
-        sonuc.append(f"\n📅 Sorgu zamanı: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}")
+            sonuc.append(f"   • Perakende büyümesi: ~%25-35")
         
     except Exception as e:
         sonuc.append(f"\n❌ Web arama hatası: {str(e)}")
-        sonuc.append(f"\n💡 Manuel referans değerleri (Aralık 2024):")
-        sonuc.append(f"   • Türkiye TÜFE (yıllık): ~%47")
-        sonuc.append(f"   • Kozmetik sektör büyümesi: ~%35-40")
+        sonuc.append(f"\n💡 Manuel referans değerleri ({sorgu_ay_adi} {sorgu_yil}):")
+        sonuc.append(f"   • Türkiye TÜFE (yıllık): ~%45-50")
+        sonuc.append(f"   • Kozmetik sektör büyümesi: ~%30-40")
         sonuc.append(f"   • USD/TRY: ~34-35 TL")
-        sonuc.append(f"   • Perakende büyümesi: ~%25-30")
+        sonuc.append(f"   • Perakende büyümesi: ~%25-35")
+    
+    sonuc.append(f"\n📅 Sorgu zamanı: {simdi.strftime('%Y-%m-%d %H:%M')}")
     
     return "\n".join(sonuc)
 
@@ -2080,7 +2103,7 @@ TOOLS = [
             "properties": {
                 "sorgu": {
                     "type": "string",
-                    "description": "Aranacak sorgu. Örn: 'Türkiye enflasyon 2024', 'kozmetik sektör büyümesi', 'USD TRY kuru'"
+                    "description": "Aranacak sorgu. Örn: 'Türkiye enflasyon 2025', 'kozmetik sektör büyümesi', 'USD TRY kuru'"
                 }
             },
             "required": ["sorgu"]
@@ -2354,7 +2377,7 @@ SYSTEM_PROMPT = """Sen deneyimli bir Retail Planner'sın. Adın "Sanal Planner".
 
 #### A.6) FİYAT ARTIŞI vs ENFLASYON (ZORUNLU!)
 - Trading'den fiyat artışını bul (`LFL Unit Sales Price TYvsLY`)
-- web_arama("Türkiye enflasyon TÜFE 2024") çağır
+- web_arama("Türkiye enflasyon TÜFE 2025") çağır
 - Fiyat artışını enflasyonla karşılaştır
 - Örnek yorumlar:
   - Eğer fiyat artışı < enflasyon: "Fiyat artışımız %26, enflasyon %47. Reel fiyatta %21 gerileme var - bu sürdürülebilir, hatta marj baskısı yaratabilir."
