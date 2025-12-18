@@ -1107,6 +1107,64 @@ def siparis_takip_analiz(kup: KupVeri, ana_grup: str = None) -> str:
     return "\n".join(sonuc)
 
 
+def web_arama(sorgu: str) -> str:
+    """
+    Web'den güncel bilgi arar - Enflasyon, sektör verileri, ekonomik göstergeler
+    DuckDuckGo ücretsiz API kullanır
+    """
+    import urllib.request
+    import urllib.parse
+    import json
+    
+    sonuc = []
+    sonuc.append(f"🔍 WEB ARAMA: {sorgu}")
+    sonuc.append("-" * 50)
+    
+    try:
+        # DuckDuckGo Instant Answer API
+        encoded_query = urllib.parse.quote(sorgu)
+        url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1"
+        
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode('utf-8'))
+        
+        # Abstract (özet bilgi)
+        if data.get('Abstract'):
+            sonuc.append(f"\n📋 ÖZET:")
+            sonuc.append(data['Abstract'])
+        
+        # Related Topics
+        if data.get('RelatedTopics'):
+            sonuc.append(f"\n📌 İLGİLİ BİLGİLER:")
+            for topic in data['RelatedTopics'][:5]:
+                if isinstance(topic, dict) and topic.get('Text'):
+                    sonuc.append(f"   • {topic['Text'][:200]}")
+        
+        # Eğer sonuç yoksa, basit bir mesaj
+        if not data.get('Abstract') and not data.get('RelatedTopics'):
+            sonuc.append(f"\n⚠️ Direkt sonuç bulunamadı.")
+            sonuc.append(f"Sorgu: {sorgu}")
+            sonuc.append(f"\n💡 Manuel referans değerleri (Aralık 2024):")
+            sonuc.append(f"   • Türkiye TÜFE (yıllık): ~%47")
+            sonuc.append(f"   • Kozmetik sektör büyümesi: ~%35-40")
+            sonuc.append(f"   • USD/TRY: ~34-35 TL")
+            sonuc.append(f"   • Perakende büyümesi: ~%25-30")
+        
+        sonuc.append(f"\n📅 Sorgu zamanı: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}")
+        
+    except Exception as e:
+        sonuc.append(f"\n❌ Web arama hatası: {str(e)}")
+        sonuc.append(f"\n💡 Manuel referans değerleri (Aralık 2024):")
+        sonuc.append(f"   • Türkiye TÜFE (yıllık): ~%47")
+        sonuc.append(f"   • Kozmetik sektör büyümesi: ~%35-40")
+        sonuc.append(f"   • USD/TRY: ~34-35 TL")
+        sonuc.append(f"   • Perakende büyümesi: ~%25-30")
+    
+    return "\n".join(sonuc)
+
+
 def ihtiyac_hesapla(kup: KupVeri, limit: int = 50) -> str:
     """Mağaza ihtiyacı vs Depo stok karşılaştırması"""
     
@@ -2015,6 +2073,20 @@ def sevkiyat_hesapla(kup: KupVeri, kategori_kod = None, urun_kod: str = None, ma
 
 TOOLS = [
     {
+        "name": "web_arama",
+        "description": "Web'den güncel ekonomik veri arar. Enflasyon, TÜFE, döviz kuru, sektör büyümesi gibi makro verileri getirir. Fiyat artışı yorumlarken MUTLAKA enflasyonla karşılaştır!",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sorgu": {
+                    "type": "string",
+                    "description": "Aranacak sorgu. Örn: 'Türkiye enflasyon 2024', 'kozmetik sektör büyümesi', 'USD TRY kuru'"
+                }
+            },
+            "required": ["sorgu"]
+        }
+    },
+    {
         "name": "genel_ozet",
         "description": "Tüm verinin genel özetini gösterir. Toplam stok, satış, ciro, kar ve stok durumu dağılımını içerir. Analize başlarken ilk çağrılması gereken araç.",
         "input_schema": {
@@ -2280,6 +2352,15 @@ SYSTEM_PROMPT = """Sen deneyimli bir Retail Planner'sın. Adın "Sanal Planner".
 - Marj değişiminin LFL Ciro artışına etkisi
 - Örnek: "Marj %40'tan %42'ye çıkmış. Bu 2 puanlık artış LFL ciro büyümesine olumlu katkı sağlamış."
 
+#### A.6) FİYAT ARTIŞI vs ENFLASYON (ZORUNLU!)
+- Trading'den fiyat artışını bul (`LFL Unit Sales Price TYvsLY`)
+- web_arama("Türkiye enflasyon TÜFE 2024") çağır
+- Fiyat artışını enflasyonla karşılaştır
+- Örnek yorumlar:
+  - Eğer fiyat artışı < enflasyon: "Fiyat artışımız %26, enflasyon %47. Reel fiyatta %21 gerileme var - bu sürdürülebilir, hatta marj baskısı yaratabilir."
+  - Eğer fiyat artışı > enflasyon: "Fiyat artışımız %50, enflasyon %47. Reel fiyatta %3 artış var - müşteri direnci olabilir, dikkat!"
+  - Eğer fiyat artışı ≈ enflasyon: "Fiyat artışımız enflasyonla paralel, reel fiyat korunmuş."
+
 ### B. ALT GRUP ANALİZİ
 
 #### B.1) SORUNLU ALT GRUPLAR (Trading'den)
@@ -2511,7 +2592,9 @@ def agent_calistir(api_key: str, kup: KupVeri, kullanici_mesaji: str, analiz_kur
             
             # Tool'u çağır
             try:
-                if tool_name == "genel_ozet":
+                if tool_name == "web_arama":
+                    tool_result = web_arama(tool_input.get("sorgu", "Türkiye enflasyon"))
+                elif tool_name == "genel_ozet":
                     tool_result = genel_ozet(kup)
                 elif tool_name == "trading_analiz":
                     tool_result = trading_analiz(
