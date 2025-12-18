@@ -209,6 +209,13 @@ with st.sidebar:
             st.caption(f"📈 Trading: {len(kup.trading):,} satır")
         if len(kup.sc_sayfalari) > 0:
             st.caption(f"📊 SC Tablosu: {len(kup.sc_sayfalari)} sayfa")
+        # Yeni raporlar
+        if len(kup.cover_diagram) > 0:
+            st.caption(f"🎯 Cover Diagram: {len(kup.cover_diagram):,} satır")
+        if len(kup.kapasite) > 0:
+            st.caption(f"🏪 Kapasite: {len(kup.kapasite):,} satır")
+        if len(kup.siparis_takip) > 0:
+            st.caption(f"📋 Sipariş Takip: {len(kup.siparis_takip):,} satır")
     else:
         st.info("👆 Dosyaları yükleyin ve 'Veriyi Yükle' butonuna basın")
     
@@ -383,7 +390,7 @@ else:
     kullanici_mesaji = None
 
 # Chat input
-user_input = st.chat_input("Agent'a bir şey sor... (örn: 'SAÇ BAKIM kategorisini analiz et')")
+user_input = st.chat_input("Soru sor... (örn: 'Bu hafta nasıl gitti?', 'Stok durumu nedir?', 'Hangi kategoriler sorunlu?')")
 
 # Input varsa işle
 mesaj = kullanici_mesaji or user_input
