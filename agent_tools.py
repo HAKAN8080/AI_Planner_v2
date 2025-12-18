@@ -131,8 +131,10 @@ class KupVeri:
         # =====================================================================
         # 5. COVER DİAGRAM (Excel) - Mağaza×AltGrup cover analizi
         # =====================================================================
-        cover_files = glob.glob(os.path.join(self.veri_klasoru, "*Cover Diagram*")) + \
-                      glob.glob(os.path.join(self.veri_klasoru, "*cover*diagram*"))
+        cover_files = glob.glob(os.path.join(self.veri_klasoru, "*Cover*diyagram*")) + \
+                      glob.glob(os.path.join(self.veri_klasoru, "*Cover*Diagram*")) + \
+                      glob.glob(os.path.join(self.veri_klasoru, "*cover*diagram*")) + \
+                      glob.glob(os.path.join(self.veri_klasoru, "*Cover diyagram*"))
         
         self.cover_diagram = pd.DataFrame()
         if cover_files:
@@ -147,7 +149,9 @@ class KupVeri:
         # =====================================================================
         kapasite_files = glob.glob(os.path.join(self.veri_klasoru, "*Kapasite*Periyod*")) + \
                          glob.glob(os.path.join(self.veri_klasoru, "*kapasite*")) + \
-                         glob.glob(os.path.join(self.veri_klasoru, "*Özet Kapasite*"))
+                         glob.glob(os.path.join(self.veri_klasoru, "*Özet Kapasite*")) + \
+                         glob.glob(os.path.join(self.veri_klasoru, "*Kapasite-Zaman*")) + \
+                         glob.glob(os.path.join(self.veri_klasoru, "*Kapasite*"))
         
         self.kapasite = pd.DataFrame()
         if kapasite_files:
@@ -2336,6 +2340,9 @@ SYSTEM_PROMPT = """Sen deneyimli bir Retail Planner'sın. Adın "Sanal Planner".
 - "Veri yok" deyip bırakma - tool'ları çağır
 - Sadece rakam listele - YORUM yap
 - Kısa cevap verme - en az 500 kelime
+- **KULLANICIYA SORU SORMA!** "Hangi kategoriye odaklanmamızı istersiniz?" gibi sorular YASAK!
+- **TEMBELLİK YAPMA!** Verilen prompt'u takip et, adım adım analiz yap
+- **EVE KOZMETİK değil, yüklenen VERİYE bak!** Kullanıcı hangi firmayı yüklediyse onu analiz et
 
 ## ✅ YAP!
 - 4 tool'un hepsini kullan
@@ -2344,6 +2351,9 @@ SYSTEM_PROMPT = """Sen deneyimli bir Retail Planner'sın. Adın "Sanal Planner".
 - Hız değişiminin NEDEN'ini açıkla (stok mu satış mı)
 - Aksiyon öner (ne yapılmalı, hangi kategoride, kaç mağazada)
 - Sorunlu 3 alt grup için mağaza detayı ver
+- **CREATİVE OL!** Standart cevaplar verme, insight üret
+- **DOĞRUDAN ANALİZE GİR!** Soru sormadan verileri analiz et
+- **HER TOOL'DAN GELEN VERİYİ YORUMLA!** Boş geçme
 
 ## 📋 KOLON İSİMLERİ REHBERİ
 
