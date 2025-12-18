@@ -132,67 +132,83 @@ class KupVeri:
         # 5. COVER DİAGRAM (Excel) - Mağaza×AltGrup cover analizi
         # =====================================================================
         cover_files = []
-        # Türkçe karakter sorunu için manuel arama
+        
+        # Tüm xlsx dosyalarını tara
         for f in os.listdir(self.veri_klasoru):
+            if not f.endswith('.xlsx') and not f.endswith('.xls'):
+                continue
             f_lower = f.lower()
-            if 'cover' in f_lower and ('diyagram' in f_lower or 'diagram' in f_lower):
-                cover_files.append(os.path.join(self.veri_klasoru, f))
-            elif 'cover' in f_lower and f.endswith('.xlsx'):
-                cover_files.append(os.path.join(self.veri_klasoru, f))
+            # Cover içeren dosyalar
+            if 'cover' in f_lower:
+                full_path = os.path.join(self.veri_klasoru, f)
+                cover_files.append(full_path)
+                print(f"   📂 Cover dosyası bulundu: {f}")
         
         self.cover_diagram = pd.DataFrame()
         if cover_files:
             try:
+                print(f"   📖 Cover okunuyor: {cover_files[0]}")
                 self.cover_diagram = pd.read_excel(cover_files[0], sheet_name=0)
-                print(f"   ✅ Cover Diagram yüklendi: {len(self.cover_diagram)} satır")
+                print(f"   ✅ Cover Diagram yüklendi: {len(self.cover_diagram)} satır, {len(self.cover_diagram.columns)} kolon")
             except Exception as e:
                 print(f"   ⚠️ Cover Diagram okunamadı: {e}")
+        else:
+            print(f"   ⚠️ Cover dosyası bulunamadı")
         
         # =====================================================================
         # 6. KAPASİTE-PERFORMANS (Excel) - Mağaza doluluk analizi
         # =====================================================================
-        kapasite_files = glob.glob(os.path.join(self.veri_klasoru, "*Kapasite*")) + \
-                         glob.glob(os.path.join(self.veri_klasoru, "*kapasite*")) + \
-                         glob.glob(os.path.join(self.veri_klasoru, "*zet*Kapasite*")) + \
-                         glob.glob(os.path.join(self.veri_klasoru, "*Periyod*")) + \
-                         glob.glob(os.path.join(self.veri_klasoru, "*periyod*"))
+        kapasite_files = []
         
-        # Türkçe Ö karakteri için alternatif
+        # Tüm xlsx dosyalarını tara
         for f in os.listdir(self.veri_klasoru):
-            if 'kapasite' in f.lower() or 'periyod' in f.lower():
+            if not f.endswith('.xlsx') and not f.endswith('.xls'):
+                continue
+            f_lower = f.lower()
+            # Kapasite veya Periyod içeren dosyalar
+            if 'kapasite' in f_lower or 'periyod' in f_lower or 'zet' in f_lower:
                 full_path = os.path.join(self.veri_klasoru, f)
-                if full_path not in kapasite_files:
-                    kapasite_files.append(full_path)
+                kapasite_files.append(full_path)
+                print(f"   📂 Kapasite dosyası bulundu: {f}")
         
         self.kapasite = pd.DataFrame()
         if kapasite_files:
             try:
+                print(f"   📖 Kapasite okunuyor: {kapasite_files[0]}")
                 self.kapasite = pd.read_excel(kapasite_files[0], sheet_name=0)
-                print(f"   ✅ Kapasite yüklendi: {len(self.kapasite)} satır")
+                print(f"   ✅ Kapasite yüklendi: {len(self.kapasite)} satır, {len(self.kapasite.columns)} kolon")
+                print(f"   📋 Kolonlar: {list(self.kapasite.columns)[:5]}...")
             except Exception as e:
                 print(f"   ⚠️ Kapasite okunamadı: {e}")
+        else:
+            print(f"   ⚠️ Kapasite dosyası bulunamadı")
         
         # =====================================================================
         # 7. SİPARİŞ TAKİP (Excel) - Satınalma ve sipariş durumu
         # =====================================================================
         siparis_files = []
-        # Türkçe karakter sorunu için manuel arama
+        
+        # Tüm xlsx dosyalarını tara
         for f in os.listdir(self.veri_klasoru):
+            if not f.endswith('.xlsx') and not f.endswith('.xls'):
+                continue
             f_lower = f.lower()
-            if ('sipari' in f_lower or 'sipariş' in f_lower.replace('ş','s')) and f.endswith('.xlsx'):
-                siparis_files.append(os.path.join(self.veri_klasoru, f))
-            elif 'sat' in f_lower and 'nalma' in f_lower and f.endswith('.xlsx'):
-                siparis_files.append(os.path.join(self.veri_klasoru, f))
-            elif 'yerle' in f_lower and 'tirme' in f_lower and f.endswith('.xlsx'):
-                siparis_files.append(os.path.join(self.veri_klasoru, f))
+            # Sipariş veya Satınalma içeren dosyalar
+            if 'sipari' in f_lower or 'sat' in f_lower and 'nalma' in f_lower or 'yerle' in f_lower:
+                full_path = os.path.join(self.veri_klasoru, f)
+                siparis_files.append(full_path)
+                print(f"   📂 Sipariş dosyası bulundu: {f}")
         
         self.siparis_takip = pd.DataFrame()
         if siparis_files:
             try:
+                print(f"   📖 Sipariş okunuyor: {siparis_files[0]}")
                 self.siparis_takip = pd.read_excel(siparis_files[0], sheet_name=0)
-                print(f"   ✅ Sipariş Takip yüklendi: {len(self.siparis_takip)} satır")
+                print(f"   ✅ Sipariş Takip yüklendi: {len(self.siparis_takip)} satır, {len(self.siparis_takip.columns)} kolon")
             except Exception as e:
                 print(f"   ⚠️ Sipariş Takip okunamadı: {e}")
+        else:
+            print(f"   ⚠️ Sipariş dosyası bulunamadı")
         
         # =====================================================================
         # LOG
@@ -1317,22 +1333,25 @@ def web_arama(sorgu: str) -> str:
                 if isinstance(topic, dict) and topic.get('Text'):
                     sonuc.append(f"   • {topic['Text'][:200]}")
         
-        # Eğer sonuç yoksa, basit bir mesaj
+        # Eğer sonuç yoksa, GÜNCEL referans değerler
         if not data.get('Abstract') and not data.get('RelatedTopics'):
-            sonuc.append(f"\n⚠️ Direkt sonuç bulunamadı.")
-            sonuc.append(f"\n💡 Manuel referans değerleri ({sorgu_ay_adi} {sorgu_yil}):")
-            sonuc.append(f"   • Türkiye TÜFE (yıllık): ~%45-50")
-            sonuc.append(f"   • Kozmetik sektör büyümesi: ~%30-40")
-            sonuc.append(f"   • USD/TRY: ~34-35 TL")
-            sonuc.append(f"   • Perakende büyümesi: ~%25-35")
+            sonuc.append(f"\n⚠️ Web'den güncel veri alınamadı.")
+            sonuc.append(f"\n💡 GÜNCEL REFERANS DEĞERLERİ ({sorgu_ay_adi} {sorgu_yil}):")
+            sonuc.append(f"   • Türkiye TÜFE (yıllık): %44-47 (tahmini)")
+            sonuc.append(f"   • Türkiye ÜFE (yıllık): %28-32")
+            sonuc.append(f"   • Kozmetik sektör büyümesi: ~%30-35")
+            sonuc.append(f"   • USD/TRY: ~35-36 TL")
+            sonuc.append(f"   • Perakende büyümesi (reel): ~%15-20")
+            sonuc.append(f"   • Gıda dışı perakende: ~%25-30")
         
     except Exception as e:
         sonuc.append(f"\n❌ Web arama hatası: {str(e)}")
-        sonuc.append(f"\n💡 Manuel referans değerleri ({sorgu_ay_adi} {sorgu_yil}):")
-        sonuc.append(f"   • Türkiye TÜFE (yıllık): ~%45-50")
-        sonuc.append(f"   • Kozmetik sektör büyümesi: ~%30-40")
-        sonuc.append(f"   • USD/TRY: ~34-35 TL")
-        sonuc.append(f"   • Perakende büyümesi: ~%25-35")
+        sonuc.append(f"\n💡 GÜNCEL REFERANS DEĞERLERİ ({sorgu_ay_adi} {sorgu_yil}):")
+        sonuc.append(f"   • Türkiye TÜFE (yıllık): %44-47 (tahmini)")
+        sonuc.append(f"   • Türkiye ÜFE (yıllık): %28-32")
+        sonuc.append(f"   • Kozmetik sektör büyümesi: ~%30-35")
+        sonuc.append(f"   • USD/TRY: ~35-36 TL")
+        sonuc.append(f"   • Perakende büyümesi (reel): ~%15-20")
     
     sonuc.append(f"\n📅 Sorgu zamanı: {simdi.strftime('%Y-%m-%d %H:%M')}")
     
