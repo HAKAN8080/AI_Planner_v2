@@ -131,10 +131,14 @@ class KupVeri:
         # =====================================================================
         # 5. COVER DİAGRAM (Excel) - Mağaza×AltGrup cover analizi
         # =====================================================================
-        cover_files = glob.glob(os.path.join(self.veri_klasoru, "*Cover*diyagram*")) + \
-                      glob.glob(os.path.join(self.veri_klasoru, "*Cover*Diagram*")) + \
-                      glob.glob(os.path.join(self.veri_klasoru, "*cover*diagram*")) + \
-                      glob.glob(os.path.join(self.veri_klasoru, "*Cover diyagram*"))
+        cover_files = []
+        # Türkçe karakter sorunu için manuel arama
+        for f in os.listdir(self.veri_klasoru):
+            f_lower = f.lower()
+            if 'cover' in f_lower and ('diyagram' in f_lower or 'diagram' in f_lower):
+                cover_files.append(os.path.join(self.veri_klasoru, f))
+            elif 'cover' in f_lower and f.endswith('.xlsx'):
+                cover_files.append(os.path.join(self.veri_klasoru, f))
         
         self.cover_diagram = pd.DataFrame()
         if cover_files:
@@ -147,11 +151,18 @@ class KupVeri:
         # =====================================================================
         # 6. KAPASİTE-PERFORMANS (Excel) - Mağaza doluluk analizi
         # =====================================================================
-        kapasite_files = glob.glob(os.path.join(self.veri_klasoru, "*Kapasite*Periyod*")) + \
+        kapasite_files = glob.glob(os.path.join(self.veri_klasoru, "*Kapasite*")) + \
                          glob.glob(os.path.join(self.veri_klasoru, "*kapasite*")) + \
-                         glob.glob(os.path.join(self.veri_klasoru, "*Özet Kapasite*")) + \
-                         glob.glob(os.path.join(self.veri_klasoru, "*Kapasite-Zaman*")) + \
-                         glob.glob(os.path.join(self.veri_klasoru, "*Kapasite*"))
+                         glob.glob(os.path.join(self.veri_klasoru, "*zet*Kapasite*")) + \
+                         glob.glob(os.path.join(self.veri_klasoru, "*Periyod*")) + \
+                         glob.glob(os.path.join(self.veri_klasoru, "*periyod*"))
+        
+        # Türkçe Ö karakteri için alternatif
+        for f in os.listdir(self.veri_klasoru):
+            if 'kapasite' in f.lower() or 'periyod' in f.lower():
+                full_path = os.path.join(self.veri_klasoru, f)
+                if full_path not in kapasite_files:
+                    kapasite_files.append(full_path)
         
         self.kapasite = pd.DataFrame()
         if kapasite_files:
@@ -164,9 +175,16 @@ class KupVeri:
         # =====================================================================
         # 7. SİPARİŞ TAKİP (Excel) - Satınalma ve sipariş durumu
         # =====================================================================
-        siparis_files = glob.glob(os.path.join(self.veri_klasoru, "*Sipariş*Takip*")) + \
-                        glob.glob(os.path.join(self.veri_klasoru, "*siparis*takip*")) + \
-                        glob.glob(os.path.join(self.veri_klasoru, "*Satınalma*"))
+        siparis_files = []
+        # Türkçe karakter sorunu için manuel arama
+        for f in os.listdir(self.veri_klasoru):
+            f_lower = f.lower()
+            if ('sipari' in f_lower or 'sipariş' in f_lower.replace('ş','s')) and f.endswith('.xlsx'):
+                siparis_files.append(os.path.join(self.veri_klasoru, f))
+            elif 'sat' in f_lower and 'nalma' in f_lower and f.endswith('.xlsx'):
+                siparis_files.append(os.path.join(self.veri_klasoru, f))
+            elif 'yerle' in f_lower and 'tirme' in f_lower and f.endswith('.xlsx'):
+                siparis_files.append(os.path.join(self.veri_klasoru, f))
         
         self.siparis_takip = pd.DataFrame()
         if siparis_files:
