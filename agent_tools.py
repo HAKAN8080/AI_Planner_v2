@@ -189,16 +189,21 @@ class KupVeri:
         siparis_files = []
         
         # Tüm xlsx dosyalarını tara
+        print(f"   🔍 Sipariş dosyası aranıyor...")
         for f in os.listdir(self.veri_klasoru):
             if not f.endswith('.xlsx') and not f.endswith('.xls'):
                 continue
             f_lower = f.lower()
+            f_ascii = f_lower.replace('ş', 's').replace('ı', 'i').replace('ü', 'u').replace('ö', 'o').replace('ç', 'c').replace('ğ', 'g')
+            
+            print(f"      Kontrol: {f} -> {f_ascii}")
+            
             # Sipariş veya Satınalma veya Yerleştirme veya Takip Raporu içeren dosyalar
-            # Türkçe karakter sorunu için: sipari, siparis, yerle, takip, satinalma
-            if ('sipari' in f_lower or 'sipariş' in f_lower or 
-                'yerle' in f_lower or 'yerleştirme' in f_lower or
-                'takip' in f_lower or 'raporu' in f_lower or
-                'satinalma' in f_lower or 'satınalma' in f_lower):
+            if ('sipari' in f_lower or 'siparis' in f_ascii or
+                'yerle' in f_lower or 'yerlestirme' in f_ascii or
+                'takip' in f_lower or 
+                'satinalma' in f_ascii or
+                ('sat' in f_ascii and 'alma' in f_ascii)):
                 full_path = os.path.join(self.veri_klasoru, f)
                 siparis_files.append(full_path)
                 print(f"   📂 Sipariş dosyası bulundu: {f}")
