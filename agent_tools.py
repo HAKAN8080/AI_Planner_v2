@@ -649,17 +649,55 @@ def trading_analiz(kup: KupVeri, ana_grup: str = None, ara_grup: str = None) -> 
         
     elif ara_grup is None:
         # ANA GRUP DETAYI - ARA GRUPLARI GÖSTER
-        ana_grup_upper = ana_grup.upper()
+        ana_grup_upper = ana_grup.upper().strip()
         
         # Bu ana grubun ara grup toplamlarını bul
+        # Hem tam eşleşme hem de içerme kontrolü yap
         ara_gruplar = []
         for r in all_rows:
-            if r['ana_grup'].upper() == ana_grup_upper and is_ara_grup_toplam(r):
+            r_ana = r['ana_grup'].upper().strip()
+            # "Toplam SOFRA" veya "SOFRA" eşleşmesi
+            ana_match = (r_ana == ana_grup_upper or 
+                        r_ana == f"TOPLAM {ana_grup_upper}" or
+                        ana_grup_upper in r_ana or
+                        r_ana.replace('TOPLAM ', '') == ana_grup_upper)
+            
+            if ana_match and is_ara_grup_toplam(r):
                 r['ad'] = r['ara_grup'].replace('Toplam ', '')
                 ara_gruplar.append(r)
         
         if not ara_gruplar:
-            return f"❌ '{ana_grup}' ana grubunda ara grup bulunamadı."
+            # Belki direkt alt gruplar var, ara grup olmadan
+            for r in all_rows:
+                r_ana = r['ana_grup'].upper().strip()
+                ana_match = (r_ana == ana_grup_upper or 
+                            ana_grup_upper in r_ana or
+                            r_ana.replace('TOPLAM ', '') == ana_grup_upper)
+                
+                if ana_match and r['alt_grup'] != '' and not r['alt_grup'].startswith('Toplam'):
+                    r['ad'] = r['alt_grup']
+                    ara_gruplar.append(r)
+            
+            if ara_gruplar:
+                # Alt grupları göster
+                ara_gruplar.sort(key=lambda x: x['ciro_pay'], reverse=True)
+                
+                sonuc.append("=" * 60)
+                sonuc.append(f"📊 {ana_grup_upper} - ALT GRUP DETAYI")
+                sonuc.append("=" * 60 + "\n")
+                
+                sonuc.append(f"{'Alt Grup':<28} {'Ciro%':>6} {'Adet%':>6} {'Stok%':>6} {'Kar%':>6} {'Cover':>6} {'LFL':>7}")
+                sonuc.append("-" * 75)
+                
+                for ag in ara_gruplar[:15]:
+                    ad = ag['ad'][:27]
+                    cover_str = f"{ag['ty_cover']:.1f}"
+                    lfl_str = f"{ag['lfl_ciro']:+.0f}%"
+                    sonuc.append(f"{ad:<28} {ag['ciro_pay']:>5.1f}% {ag['adet_pay']:>5.1f}% {ag['stok_pay']:>5.1f}% {ag['kar_pay']:>5.1f}% {cover_str:>6} {lfl_str:>7}")
+                
+                return "\n".join(sonuc)
+            
+            return f"❌ '{ana_grup}' ana grubu bulunamadı. Mevcut ana grupları görmek için trading_analiz() çağırın."
         
         ara_gruplar.sort(key=lambda x: x['ciro_pay'], reverse=True)
         
@@ -1368,21 +1406,20 @@ def web_arama(sorgu: str) -> str:
         if not data.get('Abstract') and not data.get('RelatedTopics'):
             sonuc.append(f"\n⚠️ Web'den güncel veri alınamadı.")
             sonuc.append(f"\n💡 GÜNCEL REFERANS DEĞERLERİ ({sorgu_ay_adi} {sorgu_yil}):")
-            sonuc.append(f"   • Türkiye TÜFE (yıllık): %44-47 (tahmini)")
-            sonuc.append(f"   • Türkiye ÜFE (yıllık): %28-32")
-            sonuc.append(f"   • Kozmetik sektör büyümesi: ~%30-35")
+            sonuc.append(f"   • Türkiye TÜFE (yıllık): ~%30 (tahmini)")
+            sonuc.append(f"   • Türkiye ÜFE (yıllık): ~%20-25")
+            sonuc.append(f"   • Kozmetik sektör büyümesi: ~%25-30")
             sonuc.append(f"   • USD/TRY: ~35-36 TL")
-            sonuc.append(f"   • Perakende büyümesi (reel): ~%15-20")
-            sonuc.append(f"   • Gıda dışı perakende: ~%25-30")
+            sonuc.append(f"   • Perakende büyümesi (nominal): ~%35-40")
         
     except Exception as e:
         sonuc.append(f"\n❌ Web arama hatası: {str(e)}")
         sonuc.append(f"\n💡 GÜNCEL REFERANS DEĞERLERİ ({sorgu_ay_adi} {sorgu_yil}):")
-        sonuc.append(f"   • Türkiye TÜFE (yıllık): %44-47 (tahmini)")
-        sonuc.append(f"   • Türkiye ÜFE (yıllık): %28-32")
-        sonuc.append(f"   • Kozmetik sektör büyümesi: ~%30-35")
+        sonuc.append(f"   • Türkiye TÜFE (yıllık): ~%30 (tahmini)")
+        sonuc.append(f"   • Türkiye ÜFE (yıllık): ~%20-25")
+        sonuc.append(f"   • Kozmetik sektör büyümesi: ~%25-30")
         sonuc.append(f"   • USD/TRY: ~35-36 TL")
-        sonuc.append(f"   • Perakende büyümesi (reel): ~%15-20")
+        sonuc.append(f"   • Perakende büyümesi (nominal): ~%35-40")
     
     sonuc.append(f"\n📅 Sorgu zamanı: {simdi.strftime('%Y-%m-%d %H:%M')}")
     
@@ -2541,6 +2578,7 @@ SYSTEM_PROMPT = """Sen deneyimli bir Retail Planner'sın. Adın "Sanal Planner".
 - Rakamları yazıyla: "15.234" → "yaklaşık 15 bin"
 - Yüzdeleri doğal: "%107.5" → "yüzde 107 ile bütçenin üstünde"
 - Önce SONUÇ ve YORUM, sonra detay
+- **MUTLAKA RAKAM VER!** Her metrik için somut rakam belirt (ciro, bütçe %, cover hafta, marj %)
 
 ## 📊 HAFTALIK ANALİZ STANDARDI
 
@@ -2548,21 +2586,31 @@ SYSTEM_PROMPT = """Sen deneyimli bir Retail Planner'sın. Adın "Sanal Planner".
 
 ### A. TOPLAM SEVİYE ANALİZİ (Şirket Geneli)
 
-#### A.1) BÜTÇE GERÇEKLEŞMESİ (Trading'den)
+#### A.1) BÜTÇE GERÇEKLEŞMESİ + EN YÜKSEK CİROLU 3 ANA GRUP (Trading'den) ⭐ ÖNEMLİ!
 - trading_analiz() çağır
-- `Achieved TY Sales Budget Value TRY` kolonu ile şirket toplamı bütçe gerçekleşme durumunu belirt, yorumla
-- Cirosu en yüksek (`TY Sales Value TRY`) ilk 3 ana grup için Mevcut Ana Grup bazında bütçe gerçekleşme durumunu ver
-- LFL Ciro büyümesi ile birlikte yorumla (`LFL Sales Value TYvsLY LC%`)
-- Örnek: "Toplamda %107 ile mükemmel bir bütçe gerçekleşmemiz var. Sofra grubunda geçen yıla göre LFL'a göre %51 büyüme sağladık bu sayede ciro bütçesinin %21 üzerine çıktık."
+- **ŞİRKET TOPLAMI:** `Achieved TY Sales Budget Value TRY` ile bütçe gerçekleşme %'si
+- **EN YÜKSEK CİROLU 3 ANA GRUP (ZORUNLU!):**
+  - `TY Sales Value TRY` kolonuna göre sırala, en yüksek 3 grubu bul
+  - Her grup için: Grup Adı, Ciro (TL), Bütçe Gerçekleşme (%), LFL Ciro Büyümesi (%)
+  - TABLO formatında ver:
+    | Ana Grup | Ciro (M TL) | Bütçe % | LFL Büyüme % |
+    |----------|-------------|---------|--------------|
+    | Grup 1   | XX          | %XXX    | %XX          |
+    | Grup 2   | XX          | %XXX    | %XX          |
+    | Grup 3   | XX          | %XXX    | %XX          |
+- Örnek: "Toplamda %107 bütçe gerçekleşme. En yüksek cirolu 3 grup: SOFRA (25M, %121, LFL +%51), MUTFAK (18M, %98, LFL +%12), BANYO (12M, %105, LFL +%28)"
 
 #### A.2) MAĞAZA DOLULUK (Kapasite'den)
 - kapasite_analiz() çağır
 - `#Fiili Doluluk_` kolonu ile toplam doluluk
-- Örnek: "Mağazalarımız ortalama %78 dolu durumda."
+- **Rakam ver:** Kaç mağaza, ortalama doluluk %, en dolu/boş mağaza örnekleri
+- Örnek: "302 mağazanın ortalama doluluk oranı %78. En dolu: Ankara Kızılay (%98), En boş: İzmir Karşıyaka (%45)"
 
-#### A.3) EN ÇOK CİRO YAPAN 3 ANA GRUP - MARJ KARŞILAŞTIRMASI
-- Trading'den `TY Sales Value TRY` en yüksek 3 Mevcut Ana Grup
-- Bu 3 grubun `LY LFL Gross Margin LC%` ve `TY LFL Gross Margin LC%` oranlarını karşılaştır yorumla
+#### A.3) MARJ KARŞILAŞTIRMASI - EN YÜKSEK CİROLU 3 GRUP İÇİN
+- A.1'de bulduğun en yüksek cirolu 3 grup için:
+- `LY LFL Gross Margin LC%` ve `TY LFL Gross Margin LC%` karşılaştır
+- **Rakam ver:** Her grup için geçen yıl marj %, bu yıl marj %, fark
+- Örnek: "SOFRA marjı %42'den %45'e yükseldi (+3 puan). MUTFAK %38'den %35'e düştü (-3 puan, DİKKAT!)"
 
 #### A.4) HIZ (COVER) ANALİZİ (Trading'den)
 - `LY Store Back Cover TRY` vs `TY Store Back Cover TRY` karşılaştır
@@ -2575,9 +2623,10 @@ SYSTEM_PROMPT = """Sen deneyimli bir Retail Planner'sın. Adın "Sanal Planner".
 #### A.6) FİYAT ARTIŞI vs ENFLASYON
 - Trading'den fiyat artışını bul (`LFL Unit Sales Price TYvsLY`)
 - web_arama("Türkiye enflasyon TÜFE") çağır - sorgu yapıldığı andaki yıl ve ay-1'i baz al
-- Fiyat artışını enflasyonla karşılaştır
-- **Enflasyon verisi bulunamazsa:** Bunu belirt, fiyat artışı analizini reel yorum olmadan tamamla. "Enflasyonla karşılaştırmanızı öneririm" de.
-- Örnek: "Fiyat artışımız %26, enflasyon %44. Reel fiyatta %18 gerileme var - sürdürülebilir."
+- Fiyat artışını enflasyonla karşılaştır (~%30 referans değer)
+- **Enflasyon verisi bulunamazsa:** ~%30 tahmini değer kullan
+- **Rakam ver:** Fiyat artışı %, Enflasyon %, Reel fark %
+- Örnek: "Fiyat artışımız %26, enflasyon ~%30. Reel fiyatta %4 gerileme var - sürdürülebilir, müşteri dostu."
 
 ### B. ALT GRUP ANALİZİ
 
