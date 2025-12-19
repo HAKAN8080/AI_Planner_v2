@@ -203,19 +203,22 @@ with st.sidebar:
     if st.session_state.get('kup_yuklendi') and 'kup' in st.session_state:
         st.success("✅ Veri hazır")
         kup = st.session_state['kup']
-        st.caption(f"📦 Stok/Satış: {len(kup.stok_satis):,} satır")
-        st.caption(f"🏭 Depo: {len(kup.depo_stok):,} satır")
+        
+        # Sadece yüklenen raporları göster
         if len(kup.trading) > 0:
             st.caption(f"📈 Trading: {len(kup.trading):,} satır")
-        if len(kup.sc_sayfalari) > 0:
-            st.caption(f"📊 SC Tablosu: {len(kup.sc_sayfalari)} sayfa")
-        # Yeni raporlar
         if len(kup.cover_diagram) > 0:
             st.caption(f"🎯 Cover Diagram: {len(kup.cover_diagram):,} satır")
         if len(kup.kapasite) > 0:
             st.caption(f"🏪 Kapasite: {len(kup.kapasite):,} satır")
         if len(kup.siparis_takip) > 0:
             st.caption(f"📋 Sipariş Takip: {len(kup.siparis_takip):,} satır")
+        
+        # Opsiyonel: Eski raporlar (varsa göster)
+        if len(kup.stok_satis) > 0:
+            st.caption(f"📦 Stok/Satış: {len(kup.stok_satis):,} satır")
+        if len(kup.depo_stok) > 0:
+            st.caption(f"🏭 Depo: {len(kup.depo_stok):,} satır")
     else:
         st.info("👆 Dosyaları yükleyin ve 'Veriyi Yükle' butonuna basın")
     
