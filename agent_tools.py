@@ -188,25 +188,47 @@ class KupVeri:
         # =====================================================================
         siparis_files = []
         
-        # Tüm xlsx dosyalarını tara
-        print(f"   🔍 Sipariş dosyası aranıyor...")
-        for f in os.listdir(self.veri_klasoru):
+        # Tüm xlsx dosyalarını tara ve logla
+        print(f"\n   🔍 SİPARİŞ DOSYASI ARANIYOR...")
+        print(f"   📁 Klasör: {self.veri_klasoru}")
+        
+        all_files = os.listdir(self.veri_klasoru)
+        print(f"   📄 Toplam dosya: {len(all_files)}")
+        
+        for f in all_files:
+            print(f"      -> {f}")
+            
             if not f.endswith('.xlsx') and not f.endswith('.xls'):
                 continue
+                
             f_lower = f.lower()
-            f_ascii = f_lower.replace('ş', 's').replace('ı', 'i').replace('ü', 'u').replace('ö', 'o').replace('ç', 'c').replace('ğ', 'g')
+            # Türkçe karakterleri ASCII'ye çevir
+            f_ascii = f_lower
+            for tr, en in [('ş', 's'), ('ı', 'i'), ('ü', 'u'), ('ö', 'o'), ('ç', 'c'), ('ğ', 'g'), ('İ', 'i')]:
+                f_ascii = f_ascii.replace(tr, en)
             
-            print(f"      Kontrol: {f} -> {f_ascii}")
+            print(f"         lower: {f_lower}")
+            print(f"         ascii: {f_ascii}")
             
-            # Sipariş veya Satınalma veya Yerleştirme veya Takip Raporu içeren dosyalar
-            if ('sipari' in f_lower or 'siparis' in f_ascii or
-                'yerle' in f_lower or 'yerlestirme' in f_ascii or
-                'takip' in f_lower or 
-                'satinalma' in f_ascii or
-                ('sat' in f_ascii and 'alma' in f_ascii)):
+            # Çok geniş pattern - herhangi biri eşleşirse al
+            is_siparis = False
+            if 'sipari' in f_ascii: 
+                is_siparis = True
+                print(f"         ✓ 'sipari' bulundu")
+            if 'yerle' in f_ascii:
+                is_siparis = True
+                print(f"         ✓ 'yerle' bulundu")
+            if 'takip' in f_ascii:
+                is_siparis = True
+                print(f"         ✓ 'takip' bulundu")
+            if 'satinalma' in f_ascii or 'satin' in f_ascii:
+                is_siparis = True
+                print(f"         ✓ 'satin' bulundu")
+            
+            if is_siparis:
                 full_path = os.path.join(self.veri_klasoru, f)
                 siparis_files.append(full_path)
-                print(f"   📂 Sipariş dosyası bulundu: {f}")
+                print(f"   ✅ Sipariş dosyası EKLENDİ: {f}")
         
         self.siparis_takip = pd.DataFrame()
         if siparis_files:
