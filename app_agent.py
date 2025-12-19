@@ -359,17 +359,60 @@ with st.sidebar:
     # Hızlı Komutlar
     st.subheader("⚡ Hızlı Komutlar")
     
-    if st.button("📊 Genel Analiz Yap", use_container_width=True):
-        st.session_state['hizli_komut'] = "Bu haftanın genel analizini yap. Kategorilere bak, sorunları tespit et, aksiyon önerileri sun."
+    # 1. Genel Durum
+    if st.button("📊 Genel Durum", use_container_width=True):
+        st.session_state['hizli_komut'] = "Bu haftanın genel analizini yap. Şirket toplamı bütçe gerçekleşme, en yüksek cirolu 3 ana grup, cover durumu, marj değişimi ve fiyat artışı vs enflasyon karşılaştırması yap."
     
-    if st.button("🔴 Sorunları Bul", use_container_width=True):
-        st.session_state['hizli_komut'] = "Tüm sorunlu SKU'ları tara. Yüksek cover, sevk gerekli ve düşük satışlı ürünleri bul."
+    # 2. Kapasite Analizi
+    if st.button("🏪 Kapasite Analizi", use_container_width=True):
+        st.session_state['hizli_komut'] = "Mağaza kapasite analizini yap. Doluluk oranları, en dolu ve en boş mağazalar, cover durumları ve kapasite sorunlarını detaylı analiz et."
     
-    if st.button("🚚 Sevkiyat Planı", use_container_width=True):
-        st.session_state['hizli_komut'] = "Sevk edilmesi gereken ürünleri bul ve önceliklendir."
+    # 3. Sipariş Durum Analizi
+    if st.button("📋 Sipariş Durumu", use_container_width=True):
+        st.session_state['hizli_komut'] = "Sipariş ve tedarik durumunu analiz et. Toplam bütçe vs sipariş vs depoya giren, ana grup bazında sipariş durumu ve tedarik sıkıntıları neler?"
     
-    if st.button("🏷️ İndirim Önerileri", use_container_width=True):
-        st.session_state['hizli_komut'] = "İndirime alınması gereken ürünleri bul. Cover'ı yüksek, satışı düşük olanları listele."
+    # 4. Grup Detay Analizi (Seçimli)
+    st.markdown("---")
+    st.markdown("**🔍 Grup Detay Analizi**")
+    
+    # Ana grupları trading'den çek
+    ana_grup_listesi = []
+    if st.session_state.get('kup_yuklendi') and 'kup' in st.session_state:
+        kup = st.session_state['kup']
+        if len(kup.trading) > 0:
+            # Mevcut Ana Grup kolonunu bul
+            ana_grup_kolon = None
+            for col in kup.trading.columns:
+                if 'ana grup' in col.lower() or 'ana_grup' in col.lower():
+                    ana_grup_kolon = col
+                    break
+            
+            if ana_grup_kolon:
+                # Unique ana grupları al, Toplam ve Genel Toplam hariç
+                tum_gruplar = kup.trading[ana_grup_kolon].dropna().unique().tolist()
+                ana_grup_listesi = [g for g in tum_gruplar if g and 'Toplam' not in str(g) and 'Genel' not in str(g)]
+                ana_grup_listesi = sorted(set(ana_grup_listesi))
+    
+    if ana_grup_listesi:
+        secili_ana_grup = st.selectbox(
+            "Ana Grup Seçin:",
+            options=["-- Seçiniz --"] + ana_grup_listesi,
+            key="ana_grup_secim"
+        )
+        
+        if secili_ana_grup and secili_ana_grup != "-- Seçiniz --":
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("📈 Trading Analiz", use_container_width=True, key="btn_trading"):
+                    st.session_state['hizli_komut'] = f"{secili_ana_grup} ana grubunun detaylı trading analizini yap. Bütçe gerçekleşme, ciro, cover, marj ve LFL performansını göster."
+            with col2:
+                if st.button("🎯 Cover Analiz", use_container_width=True, key="btn_cover"):
+                    st.session_state['hizli_komut'] = f"{secili_ana_grup} ana grubunun cover diagram analizini yap. Hangi alt gruplarda ve mağazalarda yavaş stok var?"
+            
+            if st.button(f"🔎 {secili_ana_grup} Tam Detay", use_container_width=True, key="btn_detay"):
+                st.session_state['hizli_komut'] = f"{secili_ana_grup} grubunu detaylı analiz et. Ara grupları, alt grupları, sorunlu ürünleri ve aksiyon önerilerini sun."
+    else:
+        st.caption("📁 Veri yüklenince ana gruplar burada listelenecek")
 
 # Ana içerik - Chat arayüzü
 st.header("💬 Planner ile Konuş")
