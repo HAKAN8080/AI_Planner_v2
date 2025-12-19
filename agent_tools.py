@@ -193,8 +193,8 @@ class KupVeri:
             if not f.endswith('.xlsx') and not f.endswith('.xls'):
                 continue
             f_lower = f.lower()
-            # Sipariş veya Satınalma içeren dosyalar
-            if 'sipari' in f_lower or 'sat' in f_lower and 'nalma' in f_lower or 'yerle' in f_lower:
+            # Sipariş veya Satınalma veya Yerleştirme içeren dosyalar
+            if 'sipari' in f_lower or 'yerle' in f_lower or 'takip' in f_lower or ('sat' in f_lower and 'nalma' in f_lower):
                 full_path = os.path.join(self.veri_klasoru, f)
                 siparis_files.append(full_path)
                 print(f"   📂 Sipariş dosyası bulundu: {f}")
