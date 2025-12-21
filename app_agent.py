@@ -549,57 +549,66 @@ with col3:
             )
 
 with col4:
-    # PDF oluştur
-    if st.session_state.get('messages'):
-        if st.button("📑 PDF Oluştur", use_container_width=True):
-            try:
-                from reportlab.lib.pagesizes import A4
-                from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-                from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-                from reportlab.lib.units import cm
-                from reportlab.pdfbase import pdfmetrics
-                from reportlab.pdfbase.ttfonts import TTFont
-                import io
-                
-                # PDF buffer
-                buffer = io.BytesIO()
-                doc = SimpleDocTemplate(buffer, pagesize=A4, 
-                                       leftMargin=2*cm, rightMargin=2*cm,
-                                       topMargin=2*cm, bottomMargin=2*cm)
-                
-                styles = getSampleStyleSheet()
-                story = []
-                
-                # Başlık
-                title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, spaceAfter=20)
-                story.append(Paragraph("Sanal Planner - Analiz Raporu", title_style))
-                story.append(Spacer(1, 12))
-                
-                # Mesajları ekle
-                for msg in st.session_state['messages']:
-                    if msg['role'] == 'user':
-                        story.append(Paragraph(f"<b>Soru:</b> {msg['content']}", styles['Normal']))
-                    else:
-                        # Markdown'ı temizle
-                        clean_text = msg['content'].replace('**', '').replace('##', '').replace('#', '')
-                        clean_text = clean_text.replace('🤖', '').replace('🧑', '').replace('📊', '')
-                        clean_text = clean_text.replace('🔴', '[!]').replace('✅', '[OK]').replace('⚠️', '[!]')
-                        story.append(Paragraph(f"<b>Cevap:</b><br/>{clean_text[:3000]}", styles['Normal']))
-                    story.append(Spacer(1, 12))
-                
-                doc.build(story)
-                buffer.seek(0)
-                
-                st.download_button(
-                    label="⬇️ PDF İndir",
-                    data=buffer,
-                    file_name="sanal_planner_rapor.pdf",
-                    mime="application/pdf"
-                )
-            except ImportError:
-                st.warning("PDF için 'reportlab' kütüphanesi gerekli: pip install reportlab")
-            except Exception as e:
-                st.error(f"PDF oluşturma hatası: {e}")
+    # PDF oluştur - önce reportlab var mı kontrol et
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        import io
+        
+        REPORTLAB_AVAILABLE = True
+    except ImportError:
+        REPORTLAB_AVAILABLE = False
+    
+    if st.session_state.get('messages') and REPORTLAB_AVAILABLE:
+        # PDF'i önceden oluştur
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, 
+                               leftMargin=2*cm, rightMargin=2*cm,
+                               topMargin=2*cm, bottomMargin=2*cm)
+        
+        styles = getSampleStyleSheet()
+        story = []
+        
+        # Başlık
+        title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, spaceAfter=20)
+        story.append(Paragraph("Sanal Planner - Analiz Raporu", title_style))
+        story.append(Spacer(1, 12))
+        
+        # Mesajları ekle
+        for msg in st.session_state['messages']:
+            if msg['role'] == 'user':
+                # Türkçe karakterleri ve özel karakterleri temizle
+                clean_q = msg['content'].encode('ascii', 'ignore').decode('ascii')
+                story.append(Paragraph(f"<b>Soru:</b> {clean_q}", styles['Normal']))
+            else:
+                # Markdown ve emojileri temizle
+                clean_text = msg['content']
+                for char in ['**', '##', '#', '🤖', '🧑', '📊', '📋', '🔴', '✅', '⚠️', '🎯', '💰', '📦', '📈', '💵', '🏆', '⭐', '🚨']:
+                    clean_text = clean_text.replace(char, '')
+                clean_text = clean_text.encode('ascii', 'ignore').decode('ascii')
+                story.append(Paragraph(f"<b>Cevap:</b><br/>{clean_text[:2500]}", styles['Normal']))
+            story.append(Spacer(1, 12))
+        
+        try:
+            doc.build(story)
+            buffer.seek(0)
+            
+            st.download_button(
+                label="📑 PDF İndir",
+                data=buffer.getvalue(),
+                file_name="sanal_planner_rapor.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+        except Exception as e:
+            st.error(f"PDF hatası: {e}")
+    
+    elif st.session_state.get('messages') and not REPORTLAB_AVAILABLE:
+        if st.button("📑 PDF (kurulum gerekli)", use_container_width=True, disabled=True):
+            pass
+        st.caption("pip install reportlab")
 
 # Footer
 st.markdown("---")
