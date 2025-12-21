@@ -632,15 +632,16 @@ def trading_analiz(kup: KupVeri, ana_grup: str = None, ara_grup: str = None) -> 
             sonuc.append(f"📈 LFL CİRO: {lfl_emoji} %{gt['lfl_ciro']:+.1f}")
             sonuc.append(f"   LFL ADET: %{gt['lfl_adet']:+.1f} | FİYAT ARTIŞI: %{gt['fiyat_artis']:+.1f}")
         
-        # Ana Gruplar Tablosu
+        # Ana Gruplar Tablosu - TÜM GRUPLAR
         sonuc.append("\n" + "=" * 60)
-        sonuc.append("🏆 EN YÜKSEK CİROLU 10 ANA GRUP")
+        sonuc.append("🏆 TÜM ANA GRUPLAR PERFORMANSI")
         sonuc.append("=" * 60 + "\n")
         
         sonuc.append(f"{'Ana Grup':<24} {'Ciro%':>6} {'Stok%':>6} {'Kar%':>6} {'Cover':>6} {'Bütçe':>7} {'LFL%':>7}")
         sonuc.append("-" * 75)
         
-        for ag in ana_gruplar[:10]:
+        # TÜM ana grupları göster - limit yok
+        for ag in ana_gruplar:
             ad = ag['ad'][:23]
             cover_str = f"{ag['ty_cover']:.1f}"
             butce_str = f"{ag['ciro_achieved']:+.0f}%"
@@ -652,7 +653,7 @@ def trading_analiz(kup: KupVeri, ana_grup: str = None, ara_grup: str = None) -> 
         sonuc.append("📊 ANA GRUP DEĞERLENDİRMESİ:")
         
         sorunlu_var = False
-        for ag in ana_gruplar[:10]:
+        for ag in ana_gruplar:  # TÜM grupları değerlendir
             sorunlar = []
             if ag['ciro_achieved'] < -10:
                 sorunlar.append(f"bütçe altı ({ag['ciro_achieved']:+.0f}%)")
@@ -2664,8 +2665,9 @@ Fiyat artışımız ([FİYAT]%) enflasyonun ([ENFLASYON]%) [ALTINDA/ÜSTÜNDE], 
 **ÖRNEK ÇIKTI:**
 "Sayın Yetkili, bu hafta şirket genelinde %107 bütçe gerçekleşmesi ile güçlü bir performans sergiledik. Bu büyümeyi %26 fiyat artışı ve %4 adet artışı ile destekledik. Brüt kar marjımız geçen yılın %47'sinden bu yıl %52'ye yükseldi, yani 5 puanlık iyileşme var. Mağaza doluluk oranımız genel toplamda %112 seviyesinde - bu kapasite baskısı olduğunu gösteriyor. Stok hızımız açısından geçen yıl 17 hafta ile dönerken bu yıl 13 hafta ile dönüyoruz - bu da stok yönetiminin önemli ölçüde iyileştiğini gösteriyor. Fiyat artışımız (%26) enflasyonun (~%30) altında, yani reel fiyatta %4 gerileme var - müşteri dostu bir politika izliyoruz."
 
-**EN YÜKSEK CİROLU 10 ANA GRUP (ZORUNLU!):**
-Genel değerlendirmeden sonra, ana grup toplamlarından en yüksek cirolu 10 grubu TABLO halinde ver:
+**TÜM ANA GRUPLARI TABLO HALİNDE GÖSTER (ZORUNLU! KISITLAMA YAPMA!):**
+Genel değerlendirmeden sonra, trading_analiz() çıktısındaki TÜM ana grupları TABLO halinde göster. 
+3, 4, 5 değil - KAÇ TANE VARSA HEPSİNİ göster! Kısıtlama yapma!
 
 | Ana Grup | Ciro (M TL) | Bütçe % | LFL Ciro % | Marj % | Cover (hf) |
 |----------|-------------|---------|------------|--------|------------|
