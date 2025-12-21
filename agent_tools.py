@@ -2611,49 +2611,56 @@ Trading verisinde 3 seviyeli hiyerarşi var:
 
 "Haftayı yorumla", "Bu hafta nasıl gitti?", "Genel analiz", "Durum nedir?" gibi sorularda MUTLAKA bu yapıyı takip et:
 
-### A. TOPLAM SEVİYE ANALİZİ (Şirket Geneli)
+### A. GENEL DEĞERLENDİRME (Şirket Özeti) ⭐ EN ÖNEMLİ BÖLÜM!
 
-**BÜTÇE GERÇEKLEŞMESİ + EN YÜKSEK CİROLU 3 ANA GRUP (Trading'den) ⭐ ÖNEMLİ!**
-- trading_analiz() çağır
-- **ŞİRKET TOPLAMI:** `Achieved TY Sales Budget Value TRY` ile bütçe gerçekleşme %'si
-- **EN YÜKSEK CİROLU 3 ANA GRUP (ZORUNLU!):**
-  - Ana Grup Toplamlarından (Ara ve Alt grup boş olan satırlar) `TY Sales Value TRY` en yüksek 3 grubu bul
-  - Her grup için: Grup Adı, Ciro (TL), Bütçe Gerçekleşme (%), LFL Ciro Büyümesi (%)
-  - TABLO formatında ver:
-    | Ana Grup | Ciro (M TL) | Bütçe % | LFL Büyüme % |
-    |----------|-------------|---------|--------------|
-    | Grup 1   | XX          | %XXX    | %XX          |
-    | Grup 2   | XX          | %XXX    | %XX          |
-    | Grup 3   | XX          | %XXX    | %XX          |
-- Örnek: "Toplamda %107 bütçe gerçekleşme. En yüksek cirolu 3 grup: SOFRA (25M, %121, LFL +%51), MUTFAK (18M, %98, LFL +%12), BANYO (12M, %105, LFL +%28)"
+Bu bölümde trading_analiz() ve kapasite_analiz() çağır, tüm metrikleri BİR PARAGRAFTA AKICI ŞEKİLDE ANLAT:
 
-**MAĞAZA DOLULUK (Kapasite'den)**
-- kapasite_analiz() çağır
-- `#Fiili Doluluk_` kolonu ile toplam doluluk
-- **Rakam ver:** Kaç mağaza, ortalama doluluk %, en dolu/boş mağaza örnekleri
-- Örnek: "302 mağazanın ortalama doluluk oranı %78. En dolu: Ankara Kızılay (%98), En boş: İzmir Karşıyaka (%45)"
+**YAZIM FORMATI (Bu şekilde tek paragraf halinde yaz):**
+"Sayın Yetkili, bu hafta şirket genelinde [BÜTÇE]% bütçe gerçekleşmesi ile [İYİ/KÖTÜ] bir performans sergiledik. 
+Bu büyümeyi [FİYAT_ARTIŞI]% fiyat artışı ve [ADET_ARTIŞI]% adet artışı ile destekledik. 
+Brüt kar marjımız geçen yılın [LY_MARJ]%'inden bu yıl [TY_MARJ]%'e [YÜKSELDİ/DÜŞTÜ], yani [FARK] puanlık [ARTIS/AZALIŞ] var.
+Mağaza doluluk oranımız genel toplamda [DOLULUK]% seviyesinde.
+Stok hızımız açısından geçen yıl [LY_COVER] hafta ile dönerken bu yıl [TY_COVER] hafta ile dönüyoruz - bu da stok yönetiminin [İYİLEŞTİĞİNİ/KÖTÜLEŞTIĞINI] gösteriyor.
+Fiyat artışımız ([FİYAT]%) enflasyonun ([ENFLASYON]%) [ALTINDA/ÜSTÜNDE], yani reel fiyatta [REEL_FARK]% [GERİLEME/ARTIŞ] var."
 
-**MARJ KARŞILAŞTIRMASI - EN YÜKSEK CİROLU 3 GRUP İÇİN**
-- Yukarıda bulduğun en yüksek cirolu 3 grup için:
-- `LY LFL Gross Margin LC%` ve `TY LFL Gross Margin LC%` karşılaştır
-- **Rakam ver:** Her grup için geçen yıl marj %, bu yıl marj %, fark
-- Örnek: "SOFRA marjı %42'den %45'e yükseldi (+3 puan). MUTFAK %38'den %35'e düştü (-3 puan, DİKKAT!)"
+**KULLANILACAK METRİKLER (Trading'den):**
+| Metrik | Kolon Adı | Açıklama |
+|--------|-----------|----------|
+| Bütçe Gerçekleşme | `Achieved TY Sales Budget Value TRY` | %100'ün üstü iyi |
+| Fiyat Artışı | `LFL Unit Sales Price TYvsLY` | Enflasyonla karşılaştır |
+| Adet Artışı | `LFL Sales Unit TYvsLY` | Hacim büyümesi |
+| Ciro Artışı (LFL) | `LFL Sales Value TYvsLY LC%` | Toplam LFL büyüme |
+| Bu Yıl Marj | `TY Gross Margin TRY` veya `TY LFL Gross Margin LC%` | Karlılık |
+| Geçen Yıl Marj | `LY LFL Gross Margin LC%` | Karşılaştırma için |
+| Bu Yıl Cover | `TY Store Back Cover TRY` | Stok hızı (düşük=iyi) |
+| Geçen Yıl Cover | `LY Store Back Cover TRY` | Karşılaştırma için |
 
-#### A.4) HIZ (COVER) ANALİZİ (Trading'den)
-- `LY Store Back Cover TRY` vs `TY Store Back Cover TRY` karşılaştır
-- Hız iyileşmesi nereden geldi? → LFL Stok değişimi mi, satış artışı mı?
-- Örnek: "Cover 8.5 haftadan 7.2 haftaya düştü. Bu iyileşme satış artışından geliyor."
+**KULLANILACAK METRİKLER (Kapasite'den):**
+| Metrik | Kolon Adı |
+|--------|-----------|
+| Mağaza Doluluk | `#Fiili Doluluk_` veya `Fiili Doluluk` |
 
-#### A.5) MARJ DEĞİŞİMİ (Trading'den)
-- `LY LFL Gross Margin LC%` vs `TY Budget Gross Margin TRY` karşılaştır
+**YORUM KURALLARI:**
+- Bütçe > %110 → "Mükemmel performans"
+- Bütçe %100-110 → "İyi performans"  
+- Bütçe %85-100 → "Bütçe altında, dikkat"
+- Bütçe < %85 → "Kritik, acil aksiyon gerekli"
+- Cover düşmüşse → "Stok yönetimi iyileşmiş"
+- Cover artmışsa → "Stok yönetimi kötüleşmiş, eritme gerekli"
+- Marj artmışsa → "Karlılık iyileşmiş"
+- Marj düşmüşse → "Karlılık baskı altında"
 
-#### A.6) FİYAT ARTIŞI vs ENFLASYON
-- Trading'den fiyat artışını bul (`LFL Unit Sales Price TYvsLY`)
-- web_arama("Türkiye enflasyon TÜFE") çağır - sorgu yapıldığı andaki yıl ve ay-1'i baz al
-- Fiyat artışını enflasyonla karşılaştır (~%30 referans değer)
-- **Enflasyon verisi bulunamazsa:** ~%30 tahmini değer kullan
-- **Rakam ver:** Fiyat artışı %, Enflasyon %, Reel fark %
-- Örnek: "Fiyat artışımız %26, enflasyon ~%30. Reel fiyatta %4 gerileme var - sürdürülebilir, müşteri dostu."
+**ÖRNEK ÇIKTI:**
+"Sayın Yetkili, bu hafta şirket genelinde %107 bütçe gerçekleşmesi ile güçlü bir performans sergiledik. Bu büyümeyi %26 fiyat artışı ve %4 adet artışı ile destekledik. Brüt kar marjımız geçen yılın %47'sinden bu yıl %52'ye yükseldi, yani 5 puanlık iyileşme var. Mağaza doluluk oranımız genel toplamda %112 seviyesinde - bu kapasite baskısı olduğunu gösteriyor. Stok hızımız açısından geçen yıl 17 hafta ile dönerken bu yıl 13 hafta ile dönüyoruz - bu da stok yönetiminin önemli ölçüde iyileştiğini gösteriyor. Fiyat artışımız (%26) enflasyonun (~%30) altında, yani reel fiyatta %4 gerileme var - müşteri dostu bir politika izliyoruz."
+
+**EN YÜKSEK CİROLU 3 ANA GRUP (ZORUNLU!):**
+Genel değerlendirmeden sonra, ana grup toplamlarından en yüksek cirolu 3 grubu TABLO halinde ver:
+
+| Ana Grup | Ciro (M TL) | Bütçe % | LFL Ciro % | Marj % | Cover (hf) |
+|----------|-------------|---------|------------|--------|------------|
+| Grup 1   | XX          | %XXX    | +%XX       | %XX    | X.X        |
+| Grup 2   | XX          | %XXX    | +%XX       | %XX    | X.X        |
+| Grup 3   | XX          | %XXX    | +%XX       | %XX    | X.X        |
 
 ### B. ALT GRUP ANALİZİ
 
