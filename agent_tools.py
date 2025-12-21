@@ -188,47 +188,19 @@ class KupVeri:
         # =====================================================================
         siparis_files = []
         
-        # Tüm xlsx dosyalarını tara ve logla
         print(f"\n   🔍 SİPARİŞ DOSYASI ARANIYOR...")
-        print(f"   📁 Klasör: {self.veri_klasoru}")
+        all_xlsx = [f for f in os.listdir(self.veri_klasoru) if f.endswith('.xlsx') or f.endswith('.xls')]
+        print(f"   📄 Klasördeki Excel dosyaları ({len(all_xlsx)} adet):")
         
-        all_files = os.listdir(self.veri_klasoru)
-        print(f"   📄 Toplam dosya: {len(all_files)}")
-        
-        for f in all_files:
-            print(f"      -> {f}")
-            
-            if not f.endswith('.xlsx') and not f.endswith('.xls'):
-                continue
-                
+        for f in all_xlsx:
+            print(f"      - {f}")
             f_lower = f.lower()
-            # Türkçe karakterleri ASCII'ye çevir
-            f_ascii = f_lower
-            for tr, en in [('ş', 's'), ('ı', 'i'), ('ü', 'u'), ('ö', 'o'), ('ç', 'c'), ('ğ', 'g'), ('İ', 'i')]:
-                f_ascii = f_ascii.replace(tr, en)
             
-            print(f"         lower: {f_lower}")
-            print(f"         ascii: {f_ascii}")
-            
-            # Çok geniş pattern - herhangi biri eşleşirse al
-            is_siparis = False
-            if 'sipari' in f_ascii: 
-                is_siparis = True
-                print(f"         ✓ 'sipari' bulundu")
-            if 'yerle' in f_ascii:
-                is_siparis = True
-                print(f"         ✓ 'yerle' bulundu")
-            if 'takip' in f_ascii:
-                is_siparis = True
-                print(f"         ✓ 'takip' bulundu")
-            if 'satinalma' in f_ascii or 'satin' in f_ascii:
-                is_siparis = True
-                print(f"         ✓ 'satin' bulundu")
-            
-            if is_siparis:
+            # EN BASİT PATTERN: "siparis" veya "takip" veya "satin" içeriyorsa al
+            if 'siparis' in f_lower or 'sipariş' in f_lower or 'takip' in f_lower or 'satin' in f_lower or 'yerle' in f_lower:
                 full_path = os.path.join(self.veri_klasoru, f)
                 siparis_files.append(full_path)
-                print(f"   ✅ Sipariş dosyası EKLENDİ: {f}")
+                print(f"   ✅ Sipariş dosyası BULUNDU: {f}")
         
         self.siparis_takip = pd.DataFrame()
         if siparis_files:
@@ -526,10 +498,16 @@ def trading_analiz(kup: KupVeri, ana_grup: str = None, ara_grup: str = None) -> 
     
     # Satır verilerini çıkar
     def extract_row(row):
+        # NaN değerleri boş string'e çevir
+        def clean_str(val):
+            if pd.isna(val) or str(val).lower() == 'nan':
+                return ''
+            return str(val).strip()
+        
         return {
-            'ana_grup': str(row.get(col_ana_grup, '')).strip() if col_ana_grup else '',
-            'ara_grup': str(row.get(col_ara_grup, '')).strip() if col_ara_grup else '',
-            'alt_grup': str(row.get(col_alt_grup, '')).strip() if col_alt_grup else '',
+            'ana_grup': clean_str(row.get(col_ana_grup, '')) if col_ana_grup else '',
+            'ara_grup': clean_str(row.get(col_ara_grup, '')) if col_ara_grup else '',
+            'alt_grup': clean_str(row.get(col_alt_grup, '')) if col_alt_grup else '',
             'ciro_achieved': parse_pct(row.get(col_ciro_achieved, 0)),
             'ty_cover': parse_val(row.get(col_ty_cover, 0)),
             'ly_cover': parse_val(row.get(col_ly_cover, 0)),
@@ -558,17 +536,53 @@ def trading_analiz(kup: KupVeri, ana_grup: str = None, ara_grup: str = None) -> 
         return False
     
     def is_ana_grup_toplam(row_data):
-        """Ana grup toplam satırı mı (Toplam RENKLİ KOZMETİK gibi)"""
-        ana = row_data['ana_grup']
-        ara = row_data['ara_grup']
-        alt = row_data['alt_grup']
-        return ana.startswith('Toplam ') and ara == '' and alt == ''
+        """Ana grup toplam satırı mı?
+        Yeni mantık: Ara grup ve Alt grup BOŞ ise bu ana grup toplamıdır
+        Örn: Sofra, NaN, NaN → Ana Grup Toplamı
+        """
+        ana = row_data['ana_grup'].strip()
+        ara = row_data['ara_grup'].strip()
+        alt = row_data['alt_grup'].strip()
+        
+        # Genel Toplam satırını hariç tut
+        if 'genel toplam' in ana.lower() or 'toplam' == ana.lower():
+            return False
+        
+        # Ana grup dolu, ara ve alt grup boş ise → Ana Grup Toplamı
+        if ana != '' and ara == '' and alt == '':
+            return True
+        
+        # Eski format: "Toplam SOFRA" gibi
+        if ana.startswith('Toplam ') and ara == '' and alt == '':
+            return True
+            
+        return False
     
     def is_ara_grup_toplam(row_data):
-        """Ara grup toplam satırı mı (Toplam GÖZ ÜRÜNLERİ gibi)"""
-        ara = row_data['ara_grup']
-        alt = row_data['alt_grup']
-        return ara.startswith('Toplam ') and alt == ''
+        """Ara grup toplam satırı mı?
+        Yeni mantık: Alt grup BOŞ ise bu ara grup toplamıdır
+        Örn: Sofra, Çay Kahve, NaN → Ara Grup Toplamı
+        """
+        ana = row_data['ana_grup'].strip()
+        ara = row_data['ara_grup'].strip()
+        alt = row_data['alt_grup'].strip()
+        
+        # Ana ve Ara dolu, Alt boş ise → Ara Grup Toplamı
+        if ana != '' and ara != '' and alt == '':
+            return True
+        
+        # Eski format: "Toplam ÇAY KAHVE" gibi
+        if ara.startswith('Toplam ') and alt == '':
+            return True
+            
+        return False
+    
+    def is_alt_grup_detay(row_data):
+        """Alt grup detay satırı mı? (3 seviye de dolu)"""
+        ana = row_data['ana_grup'].strip()
+        ara = row_data['ara_grup'].strip()
+        alt = row_data['alt_grup'].strip()
+        return ana != '' and ara != '' and alt != ''
     
     # ====================================================================
     # VERİYİ SEVİYEYE GÖRE FİLTRELE
@@ -2579,6 +2593,19 @@ SYSTEM_PROMPT = """Sen deneyimli bir Retail Planner'sın. Adın "Sanal Planner".
 - Yüzdeleri doğal: "%107.5" → "yüzde 107 ile bütçenin üstünde"
 - Önce SONUÇ ve YORUM, sonra detay
 - **MUTLAKA RAKAM VER!** Her metrik için somut rakam belirt (ciro, bütçe %, cover hafta, marj %)
+- **BAŞLIK FORMATI:** Sadece A, B, C yaz. A.1, A.2 gibi alt numaralar YAZMA!
+
+## 📋 VERİ HİYERARŞİSİ KURALI (ÇOK ÖNEMLİ!)
+Trading verisinde 3 seviyeli hiyerarşi var:
+- **Ana Grup Toplamı:** Ara Grup ve Alt Grup BOŞSA → Bu satır ana grubun toplamıdır (Örn: Sofra, NaN, NaN)
+- **Ara Grup Toplamı:** Sadece Alt Grup BOŞSA → Bu satır ara grubun toplamıdır (Örn: Sofra, Çay Kahve, NaN)
+- **Alt Grup Detay:** 3 seviye de DOLUYSA → Bu satır en alt detaydır (Örn: Sofra, Çay Kahve, Kupa)
+
+**KURAL:** Analiz yaparken SADECE ilgili seviyeyi kullan:
+- Genel analiz → Ana Grup Toplamlarını kullan (ara ve alt boş olanlar)
+- Grup detayı → Ara Grup Toplamlarını kullan (sadece alt boş olanlar)  
+- Alt detay → Alt Grup satırlarını kullan (3 seviye de dolu olanlar)
+- **BOŞ SATIRLARI ANALİZE DAHİL ETME!** "boş 1", "NaN" gibi değerler toplam satırlarıdır, detay değil!
 
 ## 📊 HAFTALIK ANALİZ STANDARDI
 
@@ -2586,11 +2613,11 @@ SYSTEM_PROMPT = """Sen deneyimli bir Retail Planner'sın. Adın "Sanal Planner".
 
 ### A. TOPLAM SEVİYE ANALİZİ (Şirket Geneli)
 
-#### A.1) BÜTÇE GERÇEKLEŞMESİ + EN YÜKSEK CİROLU 3 ANA GRUP (Trading'den) ⭐ ÖNEMLİ!
+**BÜTÇE GERÇEKLEŞMESİ + EN YÜKSEK CİROLU 3 ANA GRUP (Trading'den) ⭐ ÖNEMLİ!**
 - trading_analiz() çağır
 - **ŞİRKET TOPLAMI:** `Achieved TY Sales Budget Value TRY` ile bütçe gerçekleşme %'si
 - **EN YÜKSEK CİROLU 3 ANA GRUP (ZORUNLU!):**
-  - `TY Sales Value TRY` kolonuna göre sırala, en yüksek 3 grubu bul
+  - Ana Grup Toplamlarından (Ara ve Alt grup boş olan satırlar) `TY Sales Value TRY` en yüksek 3 grubu bul
   - Her grup için: Grup Adı, Ciro (TL), Bütçe Gerçekleşme (%), LFL Ciro Büyümesi (%)
   - TABLO formatında ver:
     | Ana Grup | Ciro (M TL) | Bütçe % | LFL Büyüme % |
@@ -2600,14 +2627,14 @@ SYSTEM_PROMPT = """Sen deneyimli bir Retail Planner'sın. Adın "Sanal Planner".
     | Grup 3   | XX          | %XXX    | %XX          |
 - Örnek: "Toplamda %107 bütçe gerçekleşme. En yüksek cirolu 3 grup: SOFRA (25M, %121, LFL +%51), MUTFAK (18M, %98, LFL +%12), BANYO (12M, %105, LFL +%28)"
 
-#### A.2) MAĞAZA DOLULUK (Kapasite'den)
+**MAĞAZA DOLULUK (Kapasite'den)**
 - kapasite_analiz() çağır
 - `#Fiili Doluluk_` kolonu ile toplam doluluk
 - **Rakam ver:** Kaç mağaza, ortalama doluluk %, en dolu/boş mağaza örnekleri
 - Örnek: "302 mağazanın ortalama doluluk oranı %78. En dolu: Ankara Kızılay (%98), En boş: İzmir Karşıyaka (%45)"
 
-#### A.3) MARJ KARŞILAŞTIRMASI - EN YÜKSEK CİROLU 3 GRUP İÇİN
-- A.1'de bulduğun en yüksek cirolu 3 grup için:
+**MARJ KARŞILAŞTIRMASI - EN YÜKSEK CİROLU 3 GRUP İÇİN**
+- Yukarıda bulduğun en yüksek cirolu 3 grup için:
 - `LY LFL Gross Margin LC%` ve `TY LFL Gross Margin LC%` karşılaştır
 - **Rakam ver:** Her grup için geçen yıl marj %, bu yıl marj %, fark
 - Örnek: "SOFRA marjı %42'den %45'e yükseldi (+3 puan). MUTFAK %38'den %35'e düştü (-3 puan, DİKKAT!)"
@@ -2630,15 +2657,16 @@ SYSTEM_PROMPT = """Sen deneyimli bir Retail Planner'sın. Adın "Sanal Planner".
 
 ### B. ALT GRUP ANALİZİ
 
-#### B.1) SORUNLU ALT GRUPLAR (Trading'den)
-- `TY Sales Value TRY` > 5000 olan Alt Grupları filtrele
+**SORUNLU ALT GRUPLAR (Trading'den)**
+- Alt Grup satırlarından (3 seviye de dolu olanlar) `TY Sales Value TRY` > 5000 olanları filtrele
 - Sorunlu olanları belirle (Cover > 15 veya Bütçe < %85 veya Marj düşüşü)
+- **BOŞ SATIRLARI ANALİZE ALMA!** Ara/Alt grup boş olan satırlar TOPLAM satırlarıdır
 
-#### B.2) SORUNLU 3 ALT GRUP İÇİN MAĞAZA ANALİZİ
+**SORUNLU 3 ALT GRUP İÇİN MAĞAZA ANALİZİ**
 - cover_diagram_analiz(alt_grup="SORUNLU_GRUP") çağır
 - "Çok Yavaş" grubundaki mağaza sayısı ve yüzdesi
 
-#### B.3) AKSİYON ÖNERİLERİ
+**AKSİYON ÖNERİLERİ**
 - Her sorunlu grup için spesifik aksiyon öner
 - Aksiyonlar MUTLAKA içermeli:
   - Hangi grup
@@ -2648,11 +2676,11 @@ SYSTEM_PROMPT = """Sen deneyimli bir Retail Planner'sın. Adın "Sanal Planner".
 
 ### C. SİPARİŞ TAKİP ANALİZİ
 
-#### C.1) TOPLAM SİPARİŞ DURUMU
+**TOPLAM SİPARİŞ DURUMU**
 - siparis_takip_analiz() çağır
 - Toplam onaylı bütçe vs toplam sipariş vs depoya giren
 
-#### C.2) ANA GRUP BAZINDA SİPARİŞ
+**ANA GRUP BAZINDA SİPARİŞ**
 - Hangi gruplarda tedarik sıkıntısı var?
 
 ## 🔧 ÇOKLU TOOL KULLANIMI (ZORUNLU!)
