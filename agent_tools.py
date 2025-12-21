@@ -462,10 +462,10 @@ def trading_analiz(kup: KupVeri, ana_grup: str = None, ara_grup: str = None) -> 
     col_ly_cover = find_col(['ly', 'store', 'cover'], ['lfl'])
     col_ty_marj = find_col(['ty', 'gross', 'margin', 'try'], ['lfl', 'ly', 'budget'])
     col_ly_marj = find_col(['ly', 'lfl', 'gross', 'margin'], ['ty', 'budget'])
-    col_lfl_ciro = find_col(['lfl', 'sales', 'value', 'tyvsly'], ['unit', 'profit'])
-    col_lfl_adet = find_col(['lfl', 'sales', 'unit', 'tyvsly'], ['value', 'cost'])
+    col_lfl_ciro = find_col(['lfl', 'sales', 'value', 'tyvsly', 'lc'], ['unit', 'profit', 'vat'])
+    col_lfl_adet = find_col(['lfl', 'sales', 'unit', 'tyvsly'], ['value', 'cost', 'price'])
     col_lfl_stok = find_col(['lfl', 'stock', 'unit', 'tyvsly'], [])
-    col_fiyat_artis = find_col(['lfl', 'unit', 'sales', 'price', 'tyvsly'], [])
+    col_fiyat_artis = find_col(['lfl', 'unit', 'sales', 'price', 'tyvsly', 'lc'], ['cost', 'stock'])
     col_lfl_kar = find_col(['lfl', 'profit', 'tyvsly'], ['unit'])
     
     # PAY KOLONLARI
@@ -637,14 +637,15 @@ def trading_analiz(kup: KupVeri, ana_grup: str = None, ara_grup: str = None) -> 
         sonuc.append("🏆 ANA GRUP PERFORMANSI")
         sonuc.append("=" * 60 + "\n")
         
-        sonuc.append(f"{'Ana Grup':<28} {'Ciro%':>6} {'Adet%':>6} {'Stok%':>6} {'Kar%':>6} {'Cover':>6} {'Bütçe':>7}")
+        sonuc.append(f"{'Ana Grup':<24} {'Ciro%':>6} {'Stok%':>6} {'Kar%':>6} {'Cover':>6} {'Bütçe':>7} {'LFL%':>7}")
         sonuc.append("-" * 75)
         
         for ag in ana_gruplar[:12]:
-            ad = ag['ad'][:27]
+            ad = ag['ad'][:23]
             cover_str = f"{ag['ty_cover']:.1f}"
             butce_str = f"{ag['ciro_achieved']:+.0f}%"
-            sonuc.append(f"{ad:<28} {ag['ciro_pay']:>5.1f}% {ag['adet_pay']:>5.1f}% {ag['stok_pay']:>5.1f}% {ag['kar_pay']:>5.1f}% {cover_str:>6} {butce_str:>7}")
+            lfl_str = f"{ag['lfl_ciro']:+.0f}%" if ag['lfl_ciro'] != 0 else "-"
+            sonuc.append(f"{ad:<24} {ag['ciro_pay']:>5.1f}% {ag['stok_pay']:>5.1f}% {ag['kar_pay']:>5.1f}% {cover_str:>6} {butce_str:>7} {lfl_str:>7}")
         
         # Kritik durumlar
         sonuc.append("\n" + "-" * 60)
