@@ -504,12 +504,102 @@ if mesaj:
                 st.session_state['messages'].append({'role': 'user', 'content': mesaj})
                 st.session_state['messages'].append({'role': 'agent', 'content': error_msg})
 
-# Temizle butonu
-col1, col2, col3 = st.columns([1, 1, 1])
-with col2:
+# Temizle ve Dışa Aktar butonları
+col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
+
+with col1:
     if st.button("🗑️ Sohbeti Temizle", use_container_width=True):
         st.session_state['messages'] = []
         st.rerun()
+
+with col2:
+    # Sohbeti kopyala butonu
+    if st.session_state.get('messages'):
+        sohbet_metni = ""
+        for msg in st.session_state['messages']:
+            if msg['role'] == 'user':
+                sohbet_metni += f"🧑 KULLANICI:\n{msg['content']}\n\n"
+            else:
+                sohbet_metni += f"🤖 SANAL PLANNER:\n{msg['content']}\n\n{'='*60}\n\n"
+        
+        st.download_button(
+            label="📋 Sohbeti İndir",
+            data=sohbet_metni,
+            file_name="sanal_planner_sohbet.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+
+with col3:
+    # Son cevabı kopyala
+    if st.session_state.get('messages'):
+        son_cevap = ""
+        for msg in reversed(st.session_state['messages']):
+            if msg['role'] == 'agent':
+                son_cevap = msg['content']
+                break
+        
+        if son_cevap:
+            st.download_button(
+                label="📄 Son Cevabı İndir",
+                data=son_cevap,
+                file_name="sanal_planner_analiz.md",
+                mime="text/markdown",
+                use_container_width=True
+            )
+
+with col4:
+    # PDF oluştur
+    if st.session_state.get('messages'):
+        if st.button("📑 PDF Oluştur", use_container_width=True):
+            try:
+                from reportlab.lib.pagesizes import A4
+                from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+                from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+                from reportlab.lib.units import cm
+                from reportlab.pdfbase import pdfmetrics
+                from reportlab.pdfbase.ttfonts import TTFont
+                import io
+                
+                # PDF buffer
+                buffer = io.BytesIO()
+                doc = SimpleDocTemplate(buffer, pagesize=A4, 
+                                       leftMargin=2*cm, rightMargin=2*cm,
+                                       topMargin=2*cm, bottomMargin=2*cm)
+                
+                styles = getSampleStyleSheet()
+                story = []
+                
+                # Başlık
+                title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, spaceAfter=20)
+                story.append(Paragraph("Sanal Planner - Analiz Raporu", title_style))
+                story.append(Spacer(1, 12))
+                
+                # Mesajları ekle
+                for msg in st.session_state['messages']:
+                    if msg['role'] == 'user':
+                        story.append(Paragraph(f"<b>Soru:</b> {msg['content']}", styles['Normal']))
+                    else:
+                        # Markdown'ı temizle
+                        clean_text = msg['content'].replace('**', '').replace('##', '').replace('#', '')
+                        clean_text = clean_text.replace('🤖', '').replace('🧑', '').replace('📊', '')
+                        clean_text = clean_text.replace('🔴', '[!]').replace('✅', '[OK]').replace('⚠️', '[!]')
+                        story.append(Paragraph(f"<b>Cevap:</b><br/>{clean_text[:3000]}", styles['Normal']))
+                    story.append(Spacer(1, 12))
+                
+                doc.build(story)
+                buffer.seek(0)
+                
+                st.download_button(
+                    label="⬇️ PDF İndir",
+                    data=buffer,
+                    file_name="sanal_planner_rapor.pdf",
+                    mime="application/pdf"
+                )
+            except ImportError:
+                st.warning("PDF için 'reportlab' kütüphanesi gerekli: pip install reportlab")
+            except Exception as e:
+                st.error(f"PDF oluşturma hatası: {e}")
 
 # Footer
 st.markdown("---")
