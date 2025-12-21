@@ -2664,8 +2664,8 @@ Fiyat artışımız ([FİYAT]%) enflasyonun ([ENFLASYON]%) [ALTINDA/ÜSTÜNDE], 
 **ÖRNEK ÇIKTI:**
 "Sayın Yetkili, bu hafta şirket genelinde %107 bütçe gerçekleşmesi ile güçlü bir performans sergiledik. Bu büyümeyi %26 fiyat artışı ve %4 adet artışı ile destekledik. Brüt kar marjımız geçen yılın %47'sinden bu yıl %52'ye yükseldi, yani 5 puanlık iyileşme var. Mağaza doluluk oranımız genel toplamda %112 seviyesinde - bu kapasite baskısı olduğunu gösteriyor. Stok hızımız açısından geçen yıl 17 hafta ile dönerken bu yıl 13 hafta ile dönüyoruz - bu da stok yönetiminin önemli ölçüde iyileştiğini gösteriyor. Fiyat artışımız (%26) enflasyonun (~%30) altında, yani reel fiyatta %4 gerileme var - müşteri dostu bir politika izliyoruz."
 
-**EN YÜKSEK CİROLU 3 ANA GRUP (ZORUNLU!):**
-Genel değerlendirmeden sonra, ana grup toplamlarından en yüksek cirolu 3 grubu TABLO halinde ver:
+**EN YÜKSEK CİROLU 10 ANA GRUP (ZORUNLU!):**
+Genel değerlendirmeden sonra, ana grup toplamlarından en yüksek cirolu 10 grubu TABLO halinde ver:
 
 | Ana Grup | Ciro (M TL) | Bütçe % | LFL Ciro % | Marj % | Cover (hf) |
 |----------|-------------|---------|------------|--------|------------|
