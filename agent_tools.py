@@ -196,8 +196,21 @@ class KupVeri:
             print(f"      - {f}")
             f_lower = f.lower()
             
-            # EN BASİT PATTERN: "siparis" veya "takip" veya "satin" içeriyorsa al
-            if 'siparis' in f_lower or 'sipariş' in f_lower or 'takip' in f_lower or 'satin' in f_lower or 'yerle' in f_lower:
+            # GENIŞ PATTERN: siparis, takip, satin, yerle, order, purchase
+            # veya dosya adı tam olarak siparis.xlsx ise
+            is_siparis = (
+                'siparis' in f_lower or 
+                'sipariş' in f_lower or 
+                'takip' in f_lower or 
+                'satin' in f_lower or 
+                'yerle' in f_lower or
+                'order' in f_lower or
+                'purchase' in f_lower or
+                f_lower == 'siparis.xlsx' or
+                f_lower.startswith('siparis')
+            )
+            
+            if is_siparis:
                 full_path = os.path.join(self.veri_klasoru, f)
                 siparis_files.append(full_path)
                 print(f"   ✅ Sipariş dosyası BULUNDU: {f}")
@@ -2665,22 +2678,21 @@ Fiyat artışımız ([FİYAT]%) enflasyonun ([ENFLASYON]%) [ALTINDA/ÜSTÜNDE], 
 **ÖRNEK ÇIKTI:**
 "Sayın Yetkili, bu hafta şirket genelinde %107 bütçe gerçekleşmesi ile güçlü bir performans sergiledik. Bu büyümeyi %26 fiyat artışı ve %4 adet artışı ile destekledik. Brüt kar marjımız geçen yılın %47'sinden bu yıl %52'ye yükseldi, yani 5 puanlık iyileşme var. Mağaza doluluk oranımız genel toplamda %112 seviyesinde - bu kapasite baskısı olduğunu gösteriyor. Stok hızımız açısından geçen yıl 17 hafta ile dönerken bu yıl 13 hafta ile dönüyoruz - bu da stok yönetiminin önemli ölçüde iyileştiğini gösteriyor. Fiyat artışımız (%26) enflasyonun (~%30) altında, yani reel fiyatta %4 gerileme var - müşteri dostu bir politika izliyoruz."
 
-**TÜM ANA GRUPLARI TABLO HALİNDE GÖSTER (ZORUNLU! KISITLAMA YAPMA!):**
-Genel değerlendirmeden sonra, trading_analiz() çıktısındaki TÜM ana grupları TABLO halinde göster. 
-3, 4, 5 değil - KAÇ TANE VARSA HEPSİNİ göster! Kısıtlama yapma!
+**TÜM ANA GRUPLAR TABLOSU (BAŞLIK: "TÜM ANA GRUPLAR PERFORMANSI"):**
+- Başlığı AYNEN "TÜM ANA GRUPLAR PERFORMANSI" yaz - "3 ANA GRUP" veya "EN YÜKSEK CİROLU" YAZMA!
+- trading_analiz() çıktısındaki TÜM ana grupları göster - KISITLAMA YAPMA!
+- Kaç ana grup varsa HEPSİNİ tabloya ekle (3, 4, 5 değil - TAMAMINI!)
 
-| Ana Grup | Ciro (M TL) | Bütçe % | LFL Ciro % | Marj % | Cover (hf) |
-|----------|-------------|---------|------------|--------|------------|
-| Grup 1   | XX          | %XXX    | +%XX       | %XX    | X.X        |
-| Grup 2   | XX          | %XXX    | +%XX       | %XX    | X.X        |
-| ...      | ...         | ...     | ...        | ...    | ...        |
-| Grup 10  | XX          | %XXX    | +%XX       | %XX    | X.X        |
+| Ana Grup | Ciro % | Bütçe % | LFL % | Cover |
+|----------|--------|---------|-------|-------|
+| (TÜM GRUPLAR - KISITLAMA YOK) |
 
 **SORUNLU ANA GRUPLARI YORUMLA (ZORUNLU!):**
 Tablodan sonra, sorunlu ana grupları kısaca yorumla:
 - Bütçe < %90 olan gruplar → "❌ [GRUP]: Bütçe altında (%XX), satış aksiyonu gerekli"
-- Cover > 14 hafta olan gruplar → "⚠️ [GRUP]: Stok yavaş (XX hf), eritme kampanyası planla"
+- Cover > 14 hafta olan gruplar → "⚠️ [GRUP]: Stok yavaş (XX hf), eritme kampanyası planla"  
 - LFL negatif olan gruplar → "📉 [GRUP]: Geçen yıla göre küçülme (%XX)"
+- Bütçe > %110 olan gruplar → "✅ [GRUP]: Güçlü performans"
 
 Örnek:
 "❌ PİŞİRME: Bütçenin %14 altında, 18 hafta cover ile çok yavaş dönüyor - acil indirim kampanyası şart.
