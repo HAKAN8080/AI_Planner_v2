@@ -634,33 +634,43 @@ def trading_analiz(kup: KupVeri, ana_grup: str = None, ara_grup: str = None) -> 
         
         # Ana Gruplar Tablosu
         sonuc.append("\n" + "=" * 60)
-        sonuc.append("🏆 ANA GRUP PERFORMANSI")
+        sonuc.append("🏆 EN YÜKSEK CİROLU 10 ANA GRUP")
         sonuc.append("=" * 60 + "\n")
         
         sonuc.append(f"{'Ana Grup':<24} {'Ciro%':>6} {'Stok%':>6} {'Kar%':>6} {'Cover':>6} {'Bütçe':>7} {'LFL%':>7}")
         sonuc.append("-" * 75)
         
-        for ag in ana_gruplar[:12]:
+        for ag in ana_gruplar[:10]:
             ad = ag['ad'][:23]
             cover_str = f"{ag['ty_cover']:.1f}"
             butce_str = f"{ag['ciro_achieved']:+.0f}%"
             lfl_str = f"{ag['lfl_ciro']:+.0f}%" if ag['lfl_ciro'] != 0 else "-"
             sonuc.append(f"{ad:<24} {ag['ciro_pay']:>5.1f}% {ag['stok_pay']:>5.1f}% {ag['kar_pay']:>5.1f}% {cover_str:>6} {butce_str:>7} {lfl_str:>7}")
         
-        # Kritik durumlar
+        # Sorunlu Ana Grupları Yorumla
         sonuc.append("\n" + "-" * 60)
-        kritik = [ag for ag in ana_gruplar if ag['ciro_achieved'] < -15 or ag['ty_cover'] > 12]
-        if kritik:
-            sonuc.append("⚠️ KRİTİK ANA GRUPLAR:")
-            for k in kritik[:5]:
-                issues = []
-                if k['ciro_achieved'] < -15:
-                    issues.append(f"Bütçe {k['ciro_achieved']:+.0f}%")
-                if k['ty_cover'] > 12:
-                    issues.append(f"Cover {k['ty_cover']:.0f}hf")
-                sonuc.append(f"   • {k['ad']}: {', '.join(issues)}")
+        sonuc.append("📊 ANA GRUP DEĞERLENDİRMESİ:")
         
-        sonuc.append(f"\n💡 Detay için: trading_analiz(ana_grup='RENKLİ KOZMETİK')")
+        sorunlu_var = False
+        for ag in ana_gruplar[:10]:
+            sorunlar = []
+            if ag['ciro_achieved'] < -10:
+                sorunlar.append(f"bütçe altı ({ag['ciro_achieved']:+.0f}%)")
+            if ag['ty_cover'] > 14:
+                sorunlar.append(f"yavaş stok ({ag['ty_cover']:.0f} hf)")
+            if ag['lfl_ciro'] < -5:
+                sorunlar.append(f"LFL düşüş ({ag['lfl_ciro']:+.0f}%)")
+            
+            if sorunlar:
+                sorunlu_var = True
+                sonuc.append(f"   ❌ {ag['ad']}: {', '.join(sorunlar)}")
+            elif ag['ciro_achieved'] > 15:
+                sonuc.append(f"   ✅ {ag['ad']}: Güçlü performans (+{ag['ciro_achieved']:.0f}% bütçe)")
+        
+        if not sorunlu_var:
+            sonuc.append("   ✅ Tüm ana gruplar sağlıklı performans gösteriyor.")
+        
+        sonuc.append(f"\n💡 Detay için: trading_analiz(ana_grup='SOFRA')")
         
     elif ara_grup is None:
         # ANA GRUP DETAYI - ARA GRUPLARI GÖSTER
@@ -2661,7 +2671,19 @@ Genel değerlendirmeden sonra, ana grup toplamlarından en yüksek cirolu 3 grub
 |----------|-------------|---------|------------|--------|------------|
 | Grup 1   | XX          | %XXX    | +%XX       | %XX    | X.X        |
 | Grup 2   | XX          | %XXX    | +%XX       | %XX    | X.X        |
-| Grup 3   | XX          | %XXX    | +%XX       | %XX    | X.X        |
+| ...      | ...         | ...     | ...        | ...    | ...        |
+| Grup 10  | XX          | %XXX    | +%XX       | %XX    | X.X        |
+
+**SORUNLU ANA GRUPLARI YORUMLA (ZORUNLU!):**
+Tablodan sonra, sorunlu ana grupları kısaca yorumla:
+- Bütçe < %90 olan gruplar → "❌ [GRUP]: Bütçe altında (%XX), satış aksiyonu gerekli"
+- Cover > 14 hafta olan gruplar → "⚠️ [GRUP]: Stok yavaş (XX hf), eritme kampanyası planla"
+- LFL negatif olan gruplar → "📉 [GRUP]: Geçen yıla göre küçülme (%XX)"
+
+Örnek:
+"❌ PİŞİRME: Bütçenin %14 altında, 18 hafta cover ile çok yavaş dönüyor - acil indirim kampanyası şart.
+⚠️ MUTFAK: %23 bütçe altı ve 16 hafta cover - stok eritme öncelikli.
+✅ SOFRA: %27 bütçe üstü, 12 hafta cover ile sağlıklı - momentum koruyalım."
 
 ### B. ALT GRUP ANALİZİ
 
